@@ -1,0 +1,11 @@
+.env
+*.pyc
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
+local-agent/workspaces/
+local-agent/*.db
+local-agent/.agent_data/
+*.log
+.DS_Store

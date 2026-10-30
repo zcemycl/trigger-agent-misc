@@ -1,0 +1,18 @@
+[project]
+name = "local-agent"
+version = "0.1.0"
+description = "Local GitHub-to-Cursor coding agent controller"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "python-dotenv>=1.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

@@ -109,6 +109,8 @@ cd local-agent
 uv run pytest -q
 ```
 
+CI runs the same suite on push/PR to `main` via `.github/workflows/ci.yml` (Python 3.10–3.12).
+
 ## Layout
 
 ```text

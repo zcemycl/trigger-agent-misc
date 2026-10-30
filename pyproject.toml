@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "trigger-agent-misc"
+version = "0.1.0"
+description = "Repository tooling and shared Python conventions"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/trigger_agent_misc"]
+
+[dependency-groups]
+dev = [
+    "black>=24.0.0",
+    "flake8>=7.0.0",
+    "flake8-pyproject>=1.2.0",
+    "isort>=5.13.0",
+    "pre-commit>=4.0.0",
+    "pytest>=8.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.black]
+line-length = 88
+target-version = ["py310", "py311", "py312"]
+extend-exclude = "/local-agent/"
+
+[tool.isort]
+profile = "black"
+line_length = 88
+skip_glob = ["local-agent/**"]
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E203", "W503"]
+exclude = [".git", "__pycache__", ".venv", "venv", "local-agent"]

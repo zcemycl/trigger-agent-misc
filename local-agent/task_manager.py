@@ -1,4 +1,4 @@
-"""Orchestrates issue → agent → tests → commit → PR (requirements 1–4)."""
+"""Orchestrates issue → agent → tests → commit → PR and PR feedback loops."""
 
 from __future__ import annotations
 
@@ -9,11 +9,22 @@ from typing import Optional
 
 from agent_runner import AgentRunner
 from config import Config
-from database import Database
+from database import CommentEvent, Database, Task, _utc_now
+from feedback import (
+    IncomingComment,
+    batch_ready,
+    format_feedback_block,
+    is_trusted_human,
+    normalize_issue_comment,
+    normalize_review,
+    normalize_review_comment,
+)
 from github_client import GitHubClient, Issue
 from workspace import WorkspaceManager
 
 logger = logging.getLogger(__name__)
+
+_FEEDBACK_ELIGIBLE_STATUSES = frozenset({"pr_open", "review_pending", "failed"})
 
 
 class TaskManager:
@@ -37,9 +48,21 @@ class TaskManager:
         self._inflight: dict[int, Future] = {}
         self._inflight_lock = threading.Lock()
         self._owner = f"task-manager-{threading.get_ident()}"
+        self._agent_login: Optional[str] = None
+        self._agent_login_lock = threading.Lock()
 
     def shutdown(self, wait: bool = True) -> None:
         self._executor.shutdown(wait=wait, cancel_futures=False)
+
+    def _get_agent_login(self) -> str:
+        with self._agent_login_lock:
+            if self._agent_login is None:
+                try:
+                    self._agent_login = self.github.get_authenticated_user()
+                except Exception:
+                    logger.exception("Failed to resolve authenticated GitHub user")
+                    self._agent_login = ""
+            return self._agent_login
 
     def active_task_count(self) -> int:
         with self._inflight_lock:
@@ -204,7 +227,13 @@ class TaskManager:
                 )
                 return
 
-            self.workspaces.push_branch(wt.path, wt.branch)
+            # Parent may have moved while the agent ran.
+            rebased = self._rebase_branch(wt.path, wt.branch, push=False)
+            self.workspaces.push_branch(
+                wt.path,
+                wt.branch,
+                force_with_lease=rebased,
+            )
             pr = self.github.create_pull_request(
                 head=wt.branch,
                 base=self.config.base_branch,
@@ -276,11 +305,290 @@ class TaskManager:
             )
 
     def process_pr_comments(self) -> None:
-        """Placeholder for requirement 5+ (comment monitoring)."""
-        logger.debug("process_pr_comments: not implemented yet (stage 5+)")
+        """Ingest trusted PR feedback, batch briefly, then enqueue update runs."""
+        if not self.config.trusted_github_users:
+            logger.debug(
+                "TRUSTED_GITHUB_USERS is empty; skipping PR feedback processing"
+            )
+            return
+
+        tasks = self.db.list_tasks(
+            statuses=["pr_open", "review_pending", "updating", "failed"]
+        )
+        for task in tasks:
+            if not task.pr_number:
+                continue
+            try:
+                self._ingest_pr_feedback(task)
+            except Exception:
+                logger.exception(
+                    "Failed to ingest feedback for PR #%s (issue #%s)",
+                    task.pr_number,
+                    task.issue_number,
+                )
+
+        self._enqueue_ready_feedback_batches()
+
+    def _ingest_pr_feedback(self, task: Task) -> None:
+        assert task.pr_number is not None
+        pr = self.github.get_pull_request(task.pr_number)
+        if pr.merged or pr.state == "closed":
+            return
+
+        agent_login = self._get_agent_login()
+        incoming: list[tuple[IncomingComment, dict]] = []
+
+        for item in self.github.list_issue_comments(task.pr_number):
+            incoming.append((normalize_issue_comment(task.pr_number, item), item))
+        for item in self.github.list_review_comments(task.pr_number):
+            incoming.append((normalize_review_comment(task.pr_number, item), item))
+        for item in self.github.list_reviews(task.pr_number):
+            normalized = normalize_review(task.pr_number, item)
+            if normalized is not None:
+                incoming.append((normalized, item))
+
+        for comment, raw in incoming:
+            if not comment.body:
+                continue
+            user = raw.get("user") or {}
+            if not is_trusted_human(
+                comment.author,
+                trusted_users=self.config.trusted_github_users,
+                agent_login=agent_login,
+                user_payload=user,
+            ):
+                continue
+            inserted = self.db.insert_comment_event(
+                comment_id=comment.comment_id,
+                pr_number=comment.pr_number,
+                comment_type=comment.comment_type,
+                author=comment.author,
+                body=comment.body,
+                path=comment.path,
+                line=comment.line,
+                diff_hunk=comment.diff_hunk,
+                status="pending",
+            )
+            if inserted:
+                logger.info(
+                    "Queued %s from @%s on PR #%s",
+                    comment.comment_type,
+                    comment.author,
+                    comment.pr_number,
+                )
+
+    def _enqueue_ready_feedback_batches(self) -> None:
+        # Group pending + failed (retryable) events by PR.
+        events = self.db.list_comment_events(statuses=["pending", "failed"])
+        by_pr: dict[int, list[CommentEvent]] = {}
+        for event in events:
+            by_pr.setdefault(event.pr_number, []).append(event)
+
+        for pr_number, pr_events in by_pr.items():
+            if not batch_ready(pr_events, self.config.feedback_batch_seconds):
+                logger.debug(
+                    "PR #%s feedback batch still collecting (%s event(s))",
+                    pr_number,
+                    len(pr_events),
+                )
+                continue
+
+            task = self.db.get_task_by_pr(pr_number)
+            if task is None:
+                continue
+            if task.status not in _FEEDBACK_ELIGIBLE_STATUSES:
+                continue
+            if self.active_task_count() >= self.config.max_concurrent_tasks:
+                logger.info(
+                    "At max concurrent tasks; deferring feedback for PR #%s",
+                    pr_number,
+                )
+                break
+
+            with self._inflight_lock:
+                existing = self._inflight.get(task.issue_number)
+                if existing is not None and not existing.done():
+                    continue
+
+            if not self.db.try_acquire_lock(task.issue_number, self._owner):
+                continue
+
+            event_ids = [e.comment_id for e in pr_events]
+            try:
+                future = self._executor.submit(
+                    self._handle_feedback, task.issue_number, event_ids
+                )
+                with self._inflight_lock:
+                    self._inflight[task.issue_number] = future
+                future.add_done_callback(
+                    lambda fut, n=task.issue_number: self._on_future_done(n, fut)
+                )
+            except Exception:
+                self.db.release_lock(task.issue_number, self._owner)
+                logger.exception(
+                    "Failed to enqueue feedback for issue #%s", task.issue_number
+                )
+
+    def _handle_feedback(self, issue_number: int, event_ids: list[str]) -> None:
+        task = self.db.get_task(issue_number)
+        if task is None or not task.pr_number:
+            return
+
+        events = [
+            e
+            for e in self.db.list_comment_events(pr_number=task.pr_number)
+            if e.comment_id in set(event_ids)
+        ]
+        if not events:
+            return
+
+        logger.info(
+            "Applying %s feedback event(s) to issue #%s / PR #%s",
+            len(events),
+            issue_number,
+            task.pr_number,
+        )
+
+        for event in events:
+            self.db.update_comment_event(event.comment_id, status="processing", error=None)
+
+        try:
+            pr = self.github.get_pull_request(task.pr_number)
+            if pr.merged or pr.state == "closed":
+                for event in events:
+                    self.db.update_comment_event(
+                        event.comment_id,
+                        status="failed",
+                        error="PR closed or merged",
+                        processed_at=_utc_now(),
+                    )
+                return
+
+            issue = self.github.get_issue(issue_number)
+            self.db.update_task(issue_number, status="updating", last_error=None)
+
+            # Ensure worktree exists (reuse branch; never create a new PR).
+            wt = self.workspaces.ensure_worktree(issue_number)
+            # Keep the PR branch current with BASE_BRANCH before applying feedback.
+            self._rebase_branch(wt.path, wt.branch, push=True)
+            diff_text = self.workspaces.get_diff(wt.path)
+            prompt = self.agent_runner.build_feedback_prompt(
+                issue_number=issue_number,
+                issue_title=issue.title,
+                issue_body=issue.body,
+                pr_number=pr.number,
+                pr_title=pr.title,
+                pr_body=pr.body,
+                feedback_block=format_feedback_block(events),
+                diff_text=diff_text,
+            )
+            agent_result = self.agent_runner.run_agent(
+                worktree=wt.path,
+                prompt=prompt,
+                issue_number=issue_number,
+            )
+            if agent_result.timed_out or agent_result.exit_code != 0:
+                raise RuntimeError(
+                    f"Feedback agent failed (exit={agent_result.exit_code}, "
+                    f"timeout={agent_result.timed_out}). Log: {agent_result.log_path}"
+                )
+
+            test_result = self.agent_runner.run_tests(
+                worktree=wt.path,
+                issue_number=issue_number,
+            )
+            if test_result.timed_out or test_result.exit_code != 0:
+                raise RuntimeError(
+                    f"Feedback tests failed (exit={test_result.exit_code}, "
+                    f"timeout={test_result.timed_out}). Log: {test_result.log_path}"
+                )
+
+            committed = self.workspaces.commit_all(
+                wt.path,
+                f"Address PR feedback for issue #{issue_number}",
+            )
+            if committed:
+                # Rebase again in case base moved during the agent run, then push.
+                rebased = self._rebase_branch(wt.path, wt.branch, push=False)
+                self.workspaces.push_branch(
+                    wt.path,
+                    wt.branch,
+                    force_with_lease=rebased,
+                )
+            else:
+                logger.info(
+                    "Feedback run for issue #%s produced no file changes",
+                    issue_number,
+                )
+
+            now = _utc_now()
+            for event in events:
+                self.db.update_comment_event(
+                    event.comment_id,
+                    status="completed",
+                    processed_at=now,
+                    error=None,
+                )
+            self.db.update_task(
+                issue_number,
+                status="review_pending",
+                last_error=None,
+            )
+            # Restore review label if we came from failed.
+            try:
+                labels = self.github.get_issue(issue_number).labels
+                if self.config.failed_label in labels:
+                    self.github.replace_agent_label(
+                        issue_number,
+                        remove=self.config.failed_label,
+                        add=self.config.review_label,
+                        current_labels=labels,
+                    )
+            except Exception:
+                logger.exception(
+                    "Failed to refresh labels after feedback on issue #%s",
+                    issue_number,
+                )
+            logger.info(
+                "Feedback applied for issue #%s on existing PR #%s",
+                issue_number,
+                task.pr_number,
+            )
+        except Exception as exc:
+            logger.exception("Feedback pipeline failed for issue #%s", issue_number)
+            err = str(exc)
+            now = _utc_now()
+            for event in events:
+                self.db.update_comment_event(
+                    event.comment_id,
+                    status="failed",
+                    error=err,
+                    # Record attempt time for retry backoff; status stays failed/retryable.
+                    processed_at=now,
+                )
+            self._fail_task(issue_number, err)
+
+    def _rebase_branch(self, worktree_path, branch: str, *, push: bool) -> bool:
+        """
+        Rebase onto origin/BASE_BRANCH if needed.
+
+        Returns True when a rebase rewrote the branch. When push=True and the
+        branch was rewritten, publishes with --force-with-lease.
+        """
+        result = self.workspaces.rebase_onto_base(worktree_path)
+        if not result.changed:
+            return False
+        logger.info("Branch %s rebased onto %s", branch, result.base_ref)
+        if push:
+            self.workspaces.push_branch(
+                worktree_path,
+                branch,
+                force_with_lease=True,
+            )
+        return True
 
     def reconcile_tasks(self) -> None:
-        """Placeholder for requirement 8 (PR lifecycle). Light status sync only."""
+        """Detect merged/closed managed PRs and rebase open branches onto base."""
         for task in self.db.list_tasks(
             statuses=["pr_open", "review_pending", "updating"]
         ):
@@ -302,10 +610,47 @@ class TaskManager:
                     task.issue_number,
                     task.pr_number,
                 )
-            elif pr.state == "closed":
+                continue
+            if pr.state == "closed":
                 self.db.update_task(task.issue_number, status="closed", last_error=None)
                 logger.info(
                     "Issue #%s PR #%s closed without merge; marked closed",
                     task.issue_number,
                     task.pr_number,
                 )
+                continue
+
+            # Keep open PR branches current when idle (skip if a worker holds the lock).
+            with self._inflight_lock:
+                fut = self._inflight.get(task.issue_number)
+                if fut is not None and not fut.done():
+                    continue
+            if task.status == "updating":
+                continue
+            if not self.db.try_acquire_lock(task.issue_number, self._owner):
+                continue
+            try:
+                wt = self.workspaces.ensure_worktree(task.issue_number)
+                if self.workspaces.has_changes(wt.path):
+                    logger.info(
+                        "Skipping rebase for issue #%s: dirty worktree",
+                        task.issue_number,
+                    )
+                    continue
+                if not self.workspaces.needs_rebase_onto_base(wt.path):
+                    continue
+                self._rebase_branch(wt.path, wt.branch, push=True)
+                self.db.update_task(task.issue_number, last_error=None)
+            except Exception as exc:
+                logger.exception(
+                    "Auto-rebase failed for issue #%s", task.issue_number
+                )
+                try:
+                    self.db.update_task(
+                        task.issue_number,
+                        last_error=f"auto-rebase failed: {exc}",
+                    )
+                except KeyError:
+                    pass
+            finally:
+                self.db.release_lock(task.issue_number, self._owner)

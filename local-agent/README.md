@@ -6,14 +6,18 @@ GitHub is the UI. WSL2 is the execution environment. Cursor Agent CLI is the cod
 
 ## Status
 
-Implemented through **functional requirements 1–4**:
+Implemented through **functional requirements 1–6**:
 
 1. Issue detection (`agent:ready` → `agent:running`, SQLite task, worktree)
 2. Cursor Agent execution (`agent -p --force --output-format text`)
 3. Independent test enforcement
 4. Git commit/push + `gh pr create`, label → `agent:review`
+5. PR conversation / inline review / submitted-review monitoring (trusted users only)
+6. Batched feedback re-runs on the **existing** branch/PR (no second PR)
 
-**Not yet implemented:** PR comment feedback loop (5–6), full comment_events processing, advanced lifecycle cleanup (8 partial: merge/close detection only).
+Also: **auto-rebase** onto `origin/{BASE_BRANCH}` when the parent moves (before/after agent runs, and during reconcile for idle open PRs). Conflicts abort the rebase and fail the task/update; successful rewrites push with `--force-with-lease`.
+
+**Partial:** lifecycle cleanup (8) — merge/close detection only; worktree cleanup not automated yet.
 
 ## Prerequisites
 
@@ -75,12 +79,21 @@ Loop:
 
 ```text
 process_ready_issues()
-process_pr_comments()   # stub until stage 5
+process_pr_comments()   # trusted feedback → batched agent update
 reconcile_tasks()       # merge/close detection
 sleep(POLL_INTERVAL)
 ```
 
 Agent work runs in a thread pool so polling continues while `agent` is busy.
+
+### Asking for fixes on a PR
+
+1. Set `TRUSTED_GITHUB_USERS` to your GitHub login(s).
+2. Wait until the controller has opened a PR (`agent:review`).
+3. Comment on the PR (conversation), leave an inline review comment, or submit a review with a body.
+4. The controller batches new feedback for `FEEDBACK_BATCH_SECONDS` (default 15), then re-runs the agent in the existing worktree, runs tests, commits, and pushes — **without** opening a new PR.
+
+Ignored: bots, the agent’s own GitHub user, untrusted users, duplicates, and comments on closed/merged PRs.
 
 ## Flow (requirements 1–4)
 
@@ -122,6 +135,7 @@ local-agent/
 ├── agent_runner.py
 ├── database.py
 ├── task_manager.py
+├── feedback.py
 ├── pyproject.toml
 ├── uv.lock
 ├── .env.example

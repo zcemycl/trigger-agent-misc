@@ -108,3 +108,89 @@ def test_commit_all_and_refuse_path_collision(tmp_path: Path) -> None:
     collision.mkdir(parents=True)
     with pytest.raises(WorkspaceError, match="already exists"):
         mgr.ensure_worktree(9)
+
+
+def _advance_main(source: Path, text: str) -> None:
+    subprocess.run(
+        ["git", "checkout", "main"],
+        cwd=source,
+        check=True,
+        capture_output=True,
+    )
+    readme = source / "README.md"
+    readme.write_text(readme.read_text(encoding="utf-8") + text, encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=source, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", "advance main"],
+        cwd=source,
+        check=True,
+        capture_output=True,
+    )
+
+
+def test_rebase_onto_base_when_parent_moves(tmp_path: Path) -> None:
+    source = tmp_path / "repo"
+    _init_repo(source)
+    mgr = WorkspaceManager(_config(tmp_path, source))
+    info = mgr.ensure_worktree(1)
+    (info.path / "feature.txt").write_text("feature\n", encoding="utf-8")
+    assert mgr.commit_all(info.path, "add feature") is True
+
+    assert mgr.needs_rebase_onto_base(info.path) is False
+    noop = mgr.rebase_onto_base(info.path)
+    assert noop.already_up_to_date is True
+    assert noop.changed is False
+
+    _advance_main(source, "base change\n")
+    mgr.fetch_origin()
+    assert mgr.needs_rebase_onto_base(info.path) is True
+    result = mgr.rebase_onto_base(info.path, fetch=False)
+    assert result.changed is True
+    assert mgr.needs_rebase_onto_base(info.path) is False
+    assert "base change" in (info.path / "README.md").read_text(encoding="utf-8")
+    assert (info.path / "feature.txt").exists()
+
+
+def test_rebase_onto_base_aborts_on_conflict(tmp_path: Path) -> None:
+    source = tmp_path / "repo"
+    _init_repo(source)
+    mgr = WorkspaceManager(_config(tmp_path, source))
+    info = mgr.ensure_worktree(2)
+    (info.path / "README.md").write_text("feature edit\n", encoding="utf-8")
+    assert mgr.commit_all(info.path, "edit readme on branch") is True
+
+    subprocess.run(
+        ["git", "checkout", "main"],
+        cwd=source,
+        check=True,
+        capture_output=True,
+    )
+    (source / "README.md").write_text("main edit\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=source, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", "edit readme on main"],
+        cwd=source,
+        check=True,
+        capture_output=True,
+    )
+
+    with pytest.raises(WorkspaceError, match="Rebase onto"):
+        mgr.rebase_onto_base(info.path)
+
+    # Worktree should not be left mid-rebase.
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=info.path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert " Ul " not in status.stdout  # not unmerged after abort
+    head = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        cwd=info.path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert head.stdout.strip() == "agent/issue-2"

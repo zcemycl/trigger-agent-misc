@@ -25,6 +25,16 @@ class WorktreeInfo:
     path: Path
 
 
+@dataclass
+class RebaseResult:
+    """Outcome of syncing an agent branch onto the configured base."""
+
+    changed: bool
+    already_up_to_date: bool
+    base_ref: str
+    aborted_on_conflict: bool = False
+
+
 class WorkspaceManager:
     """Create and manage per-issue git worktrees under WORKSPACE_ROOT."""
 
@@ -162,8 +172,11 @@ class WorkspaceManager:
 
         return WorktreeInfo(issue_number=issue_number, branch=branch, path=path)
 
+    def base_ref(self) -> str:
+        return f"origin/{self.config.base_branch}"
+
     def get_diff(self, worktree: Path, *, against: str | None = None) -> str:
-        base = against or f"origin/{self.config.base_branch}"
+        base = against or self.base_ref()
         result = self._git(["diff", f"{base}...HEAD"], cwd=worktree, check=False)
         return result.stdout
 
@@ -173,6 +186,66 @@ class WorkspaceManager:
 
     def has_changes(self, worktree: Path) -> bool:
         return bool(self.status_porcelain(worktree).strip())
+
+    def rev_parse(self, worktree: Path, ref: str) -> str:
+        result = self._git(["rev-parse", ref], cwd=worktree)
+        return result.stdout.strip()
+
+    def is_ancestor(self, worktree: Path, maybe_ancestor: str, ref: str) -> bool:
+        result = self._git(
+            ["merge-base", "--is-ancestor", maybe_ancestor, ref],
+            cwd=worktree,
+            check=False,
+        )
+        return result.returncode == 0
+
+    def needs_rebase_onto_base(self, worktree: Path) -> bool:
+        """True when origin/BASE_BRANCH has commits not reachable from HEAD."""
+        base = self.base_ref()
+        probe = self._git(["rev-parse", "--verify", base], cwd=worktree, check=False)
+        if probe.returncode != 0:
+            raise WorkspaceError(f"Base ref {base} not found in {worktree}")
+        return not self.is_ancestor(worktree, base, "HEAD")
+
+    def rebase_onto_base(self, worktree: Path, *, fetch: bool = True) -> RebaseResult:
+        """
+        Rebase the worktree branch onto origin/BASE_BRANCH when the parent moved.
+
+        On conflict: aborts the rebase and raises WorkspaceError.
+        Requires a clean working tree.
+        """
+        if fetch:
+            self.fetch_origin()
+
+        base = self.base_ref()
+        if self.has_changes(worktree):
+            raise WorkspaceError(
+                f"Cannot rebase {worktree}: working tree has uncommitted changes"
+            )
+
+        if not self.needs_rebase_onto_base(worktree):
+            logger.info("%s already contains %s; no rebase needed", worktree, base)
+            return RebaseResult(
+                changed=False,
+                already_up_to_date=True,
+                base_ref=base,
+            )
+
+        logger.info("Rebasing %s onto %s", worktree, base)
+        result = self._git(["rebase", base], cwd=worktree, check=False)
+        if result.returncode != 0:
+            self._git(["rebase", "--abort"], cwd=worktree, check=False)
+            detail = (result.stderr or result.stdout).strip()
+            raise WorkspaceError(
+                f"Rebase onto {base} failed in {worktree} (aborted): {detail}"
+            )
+
+        logger.info("Rebase onto %s succeeded in %s", base, worktree)
+        return RebaseResult(
+            changed=True,
+            already_up_to_date=False,
+            base_ref=base,
+        )
 
     def commit_all(self, worktree: Path, message: str) -> bool:
         """Stage all changes and commit. Returns False if there was nothing to commit."""
@@ -197,8 +270,17 @@ class WorkspaceManager:
             )
         return True
 
-    def push_branch(self, worktree: Path, branch: str) -> None:
-        self._git(["push", "-u", "origin", branch], cwd=worktree)
+    def push_branch(
+        self,
+        worktree: Path,
+        branch: str,
+        *,
+        force_with_lease: bool = False,
+    ) -> None:
+        args = ["push", "-u", "origin", branch]
+        if force_with_lease:
+            args = ["push", "--force-with-lease", "-u", "origin", branch]
+        self._git(args, cwd=worktree)
 
     def remove_worktree(self, issue_number: int, *, force: bool = False) -> None:
         path = self.worktree_path(issue_number)

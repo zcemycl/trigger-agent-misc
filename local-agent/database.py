@@ -175,6 +175,14 @@ class Database:
             ).fetchone()
             return Task.from_row(row) if row else None
 
+    def get_task_by_pr(self, pr_number: int) -> Optional[Task]:
+        with self.transaction() as conn:
+            row = conn.execute(
+                "SELECT * FROM tasks WHERE pr_number = ?",
+                (pr_number,),
+            ).fetchone()
+            return Task.from_row(row) if row else None
+
     def list_tasks(self, statuses: Optional[list[str]] = None) -> list[Task]:
         with self.transaction() as conn:
             if statuses:

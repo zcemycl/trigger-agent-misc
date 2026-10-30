@@ -18,4 +18,5 @@
 - Work only on the assigned feature branch.
 - Never push to main.
 - Never merge pull requests.
-- Never modify GitHub automation or security settings.
+- You may update CI workflow files when the assigned issue or PR feedback asks for it.
+- Never change GitHub secrets, permissions, environments, or repository security settings.

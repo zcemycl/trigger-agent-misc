@@ -204,6 +204,43 @@ Body:
 {body}
 """
 
+    def build_rebase_conflict_prompt(
+        self,
+        *,
+        issue_number: int,
+        base_branch: str,
+        conflicted_files: list[str],
+        rebase_detail: str,
+    ) -> str:
+        files = "\n".join(f"- `{path}`" for path in conflicted_files) or "- (unknown)"
+        detail = (rebase_detail or "").strip() or "(no git detail)"
+        return f"""You are a coding agent controlled by an external Python orchestrator.
+
+{self.hard_controller_rules()}
+
+A `git rebase` onto `{base_branch}` is IN PROGRESS and stopped on merge conflicts
+for issue #{issue_number}. Resolve the conflicts so the controller can run
+`git rebase --continue`.
+
+## Your job
+- Open each conflicted file and resolve ALL conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`).
+- Preserve the feature-branch intent while incorporating necessary base-branch changes.
+- Prefer keeping both sides' unique additions when they do not contradict.
+- Do NOT leave conflict markers in any file.
+- Do NOT run `git rebase --continue`, `git rebase --abort`, `git commit`, or `git push`.
+- Do NOT create branches or pull requests.
+- You may run read-only git commands (`git status`, `git diff`) if helpful.
+- After resolving, leave the files saved on disk; the controller will `git add` them.
+
+## Conflicted files
+{files}
+
+## Git detail
+```
+{detail}
+```
+"""
+
     def build_feedback_prompt(
         self,
         *,

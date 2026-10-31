@@ -118,6 +118,25 @@ def _parse_repo(slug: str) -> tuple[str, str]:
     return parts[0], parts[1]
 
 
+def _scrub_empty_git_identity_env() -> None:
+    """
+    dotenv often sets `GIT_COMMITTER_NAME=` to an empty string.
+
+    Git treats a set-but-empty identity as invalid (`empty ident name (for <>)`),
+    which breaks rebase/commit. Remove blanks from the process environment.
+    Also drop GIT_AUTHOR_*/GIT_COMMITTER_* after config capture so only
+    explicit commit env overrides apply (see Config.git_commit_env).
+    """
+    for key in (
+        "GIT_AUTHOR_NAME",
+        "GIT_AUTHOR_EMAIL",
+        "GIT_COMMITTER_NAME",
+        "GIT_COMMITTER_EMAIL",
+    ):
+        if key in os.environ and not os.environ.get(key, "").strip():
+            os.environ.pop(key, None)
+
+
 def load_config(env_file: str | Path | None = None) -> Config:
     """Load and validate configuration from the environment."""
     if env_file is not None:
@@ -129,6 +148,8 @@ def load_config(env_file: str | Path | None = None) -> Config:
             load_dotenv(local_env)
         else:
             load_dotenv()
+
+    _scrub_empty_git_identity_env()
 
     github_repo = _require("GITHUB_REPO")
     owner, repo = _parse_repo(github_repo)
@@ -172,7 +193,7 @@ def load_config(env_file: str | Path | None = None) -> Config:
     database_path.parent.mkdir(parents=True, exist_ok=True)
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    return Config(
+    cfg = Config(
         github_repo=github_repo,
         owner=owner,
         repo=repo,
@@ -190,15 +211,36 @@ def load_config(env_file: str | Path | None = None) -> Config:
         feedback_batch_seconds=_parse_int("FEEDBACK_BATCH_SECONDS", 15, minimum=0),
         max_agent_retries=_parse_int("MAX_AGENT_RETRIES", 2, minimum=0),
         commit_message_prefix=os.getenv("COMMIT_MESSAGE_PREFIX", "agent:").strip(),
-        git_author_name=os.getenv("GIT_AUTHOR_NAME", "local-agent").strip(),
-        git_author_email=os.getenv(
-            "GIT_AUTHOR_EMAIL",
-            "local-agent[bot]@users.noreply.github.com",
+        git_author_name=(
+            os.getenv("COMMIT_GIT_AUTHOR_NAME")
+            or os.getenv("GIT_AUTHOR_NAME", "local-agent")
         ).strip(),
-        git_committer_name=os.getenv("GIT_COMMITTER_NAME", "").strip(),
-        git_committer_email=os.getenv("GIT_COMMITTER_EMAIL", "").strip(),
+        git_author_email=(
+            os.getenv("COMMIT_GIT_AUTHOR_EMAIL")
+            or os.getenv(
+                "GIT_AUTHOR_EMAIL",
+                "local-agent[bot]@users.noreply.github.com",
+            )
+        ).strip(),
+        git_committer_name=(
+            os.getenv("COMMIT_GIT_COMMITTER_NAME")
+            or os.getenv("GIT_COMMITTER_NAME", "")
+        ).strip(),
+        git_committer_email=(
+            os.getenv("COMMIT_GIT_COMMITTER_EMAIL")
+            or os.getenv("GIT_COMMITTER_EMAIL", "")
+        ).strip(),
         commit_co_authored_by=os.getenv(
             "COMMIT_CO_AUTHORED_BY",
             "local-agent <local-agent[bot]@users.noreply.github.com>",
         ).strip(),
     )
+    # Keep process env clean: agent identity is applied only in commit_all().
+    for key in (
+        "GIT_AUTHOR_NAME",
+        "GIT_AUTHOR_EMAIL",
+        "GIT_COMMITTER_NAME",
+        "GIT_COMMITTER_EMAIL",
+    ):
+        os.environ.pop(key, None)
+    return cfg

@@ -81,7 +81,11 @@ def test_handle_new_issue_success_creates_pr(tmp_path: Path) -> None:
     workspaces.ensure_worktree.return_value = wt
     workspaces.commit_all.return_value = True
     workspaces.rebase_onto_base.return_value = MagicMock(
-        changed=False, already_up_to_date=True, base_ref="origin/main"
+        changed=False,
+        already_up_to_date=True,
+        base_ref="origin/main",
+        conflict_in_progress=False,
+        detail="",
     )
 
     agent.build_implementation_prompt.return_value = "prompt"

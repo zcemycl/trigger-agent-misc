@@ -126,7 +126,11 @@ def test_ingest_and_apply_feedback_without_new_pr(tmp_path: Path) -> None:
     workspaces.get_diff.return_value = "diff --git a/app.py"
     workspaces.commit_all.return_value = True
     workspaces.rebase_onto_base.return_value = MagicMock(
-        changed=False, already_up_to_date=True, base_ref="origin/main"
+        changed=False,
+        already_up_to_date=True,
+        base_ref="origin/main",
+        conflict_in_progress=False,
+        detail="",
     )
 
     agent = MagicMock()

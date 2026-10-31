@@ -257,7 +257,12 @@ class TaskManager:
                 return
 
             # Parent may have moved while the agent ran.
-            rebased = self._rebase_branch(wt.path, wt.branch, push=False)
+            rebased = self._rebase_branch(
+                wt.path,
+                wt.branch,
+                push=False,
+                issue_number=issue.number,
+            )
             self.workspaces.push_branch(
                 wt.path,
                 wt.branch,
@@ -499,7 +504,12 @@ class TaskManager:
             # Ensure worktree exists (reuse branch; never create a new PR).
             wt = self.workspaces.ensure_worktree(issue_number)
             # Keep the PR branch current with BASE_BRANCH before applying feedback.
-            self._rebase_branch(wt.path, wt.branch, push=True)
+            self._rebase_branch(
+                wt.path,
+                wt.branch,
+                push=True,
+                issue_number=issue_number,
+            )
             diff_text = self.workspaces.get_diff(wt.path)
             prompt = self.agent_runner.build_feedback_prompt(
                 issue_number=issue_number,
@@ -549,7 +559,12 @@ class TaskManager:
             )
             if committed:
                 # Rebase again in case base moved during the agent run, then push.
-                rebased = self._rebase_branch(wt.path, wt.branch, push=False)
+                rebased = self._rebase_branch(
+                    wt.path,
+                    wt.branch,
+                    push=False,
+                    issue_number=issue_number,
+                )
                 self.workspaces.push_branch(
                     wt.path,
                     wt.branch,
@@ -608,16 +623,41 @@ class TaskManager:
                 )
             self._fail_task(issue_number, err)
 
-    def _rebase_branch(self, worktree_path, branch: str, *, push: bool) -> bool:
+    def _rebase_branch(
+        self,
+        worktree_path,
+        branch: str,
+        *,
+        push: bool,
+        issue_number: int | None = None,
+    ) -> bool:
         """
         Rebase onto origin/BASE_BRANCH if needed.
 
-        Returns True when a rebase rewrote the branch. When push=True and the
-        branch was rewritten, publishes with --force-with-lease.
+        On conflicts, runs Cursor Agent to resolve markers, then continues the
+        rebase. Returns True when a rebase rewrote the branch. When push=True
+        and the branch was rewritten, publishes with --force-with-lease.
         """
-        result = self.workspaces.rebase_onto_base(worktree_path)
-        if not result.changed:
+        result = self.workspaces.rebase_onto_base(
+            worktree_path,
+            abort_on_conflict=False,
+        )
+        if result.already_up_to_date:
             return False
+        if result.conflict_in_progress:
+            issue_no = issue_number
+            if issue_no is None:
+                # Best-effort parse from agent/issue-N bootstrap names.
+                issue_no = 0
+            self._resolve_rebase_conflicts(
+                worktree_path,
+                issue_number=issue_no,
+                base_ref=result.base_ref,
+                detail=result.detail,
+            )
+        elif not result.changed:
+            return False
+
         logger.info("Branch %s rebased onto %s", branch, result.base_ref)
         if push:
             self.workspaces.push_branch(
@@ -626,6 +666,103 @@ class TaskManager:
                 force_with_lease=True,
             )
         return True
+
+    def _resolve_rebase_conflicts(
+        self,
+        worktree_path,
+        *,
+        issue_number: int,
+        base_ref: str,
+        detail: str,
+        max_rounds: int = 8,
+    ) -> None:
+        """Drive agent conflict resolution until rebase finishes or fails."""
+        from pathlib import Path
+
+        worktree = Path(worktree_path)
+        last_detail = detail
+        for round_idx in range(1, max_rounds + 1):
+            if not self.workspaces.is_rebase_in_progress(worktree):
+                logger.info(
+                    "Rebase finished during conflict resolution for issue #%s",
+                    issue_number,
+                )
+                return
+
+            conflicted = self.workspaces.conflicted_files(worktree)
+            if not conflicted:
+                # Sometimes only the continue step is needed (e.g. empty commit).
+                cont = self.workspaces.continue_rebase(worktree)
+                if cont.returncode == 0 and not self.workspaces.is_rebase_in_progress(
+                    worktree
+                ):
+                    return
+                last_detail = (cont.stderr or cont.stdout or last_detail).strip()
+                if self.workspaces.is_rebase_in_progress(worktree):
+                    conflicted = self.workspaces.conflicted_files(worktree)
+                if not conflicted and cont.returncode != 0:
+                    self.workspaces.abort_rebase(worktree)
+                    raise RuntimeError(
+                        f"rebase --continue failed without conflict files: {last_detail}"
+                    )
+                if not conflicted:
+                    continue
+
+            logger.info(
+                "Resolving rebase conflicts for issue #%s (round %s): %s",
+                issue_number,
+                round_idx,
+                ", ".join(conflicted),
+            )
+            prompt = self.agent_runner.build_rebase_conflict_prompt(
+                issue_number=issue_number,
+                base_branch=base_ref,
+                conflicted_files=conflicted,
+                rebase_detail=last_detail,
+            )
+            agent_result = self.agent_runner.run_agent(
+                worktree=worktree,
+                prompt=prompt,
+                issue_number=issue_number,
+            )
+            if agent_result.timed_out or agent_result.exit_code != 0:
+                self.workspaces.abort_rebase(worktree)
+                raise RuntimeError(
+                    f"Conflict-resolution agent failed (exit={agent_result.exit_code}, "
+                    f"timeout={agent_result.timed_out}). Log: {agent_result.log_path}"
+                )
+
+            # Ensure agent did not leave markers; still stage and continue.
+            self.workspaces.stage_paths(worktree, conflicted)
+            remaining = self.workspaces.conflicted_files(worktree)
+            if remaining:
+                self.workspaces.abort_rebase(worktree)
+                raise RuntimeError(
+                    "Conflict markers remain after agent resolution: "
+                    + ", ".join(remaining)
+                )
+
+            cont = self.workspaces.continue_rebase(worktree)
+            last_detail = (cont.stderr or cont.stdout or "").strip()
+            if cont.returncode == 0 and not self.workspaces.is_rebase_in_progress(
+                worktree
+            ):
+                logger.info(
+                    "Rebase conflicts resolved for issue #%s after %s round(s)",
+                    issue_number,
+                    round_idx,
+                )
+                return
+            if not self.workspaces.is_rebase_in_progress(worktree) and cont.returncode != 0:
+                self.workspaces.abort_rebase(worktree)
+                raise RuntimeError(f"rebase --continue failed: {last_detail}")
+            # else: another commit in the rebase hit conflicts — loop
+
+        self.workspaces.abort_rebase(worktree)
+        raise RuntimeError(
+            f"Exceeded {max_rounds} rebase conflict-resolution rounds "
+            f"for issue #{issue_number}: {last_detail}"
+        )
 
     def reconcile_tasks(self) -> None:
         """Detect merged/closed managed PRs and rebase open branches onto base."""
@@ -670,6 +807,15 @@ class TaskManager:
             if not self.db.try_acquire_lock(task.issue_number, self._owner):
                 continue
             try:
+                # Avoid re-running expensive conflict agents every poll after a hard fail.
+                if task.last_error and task.last_error.startswith(
+                    "auto-rebase conflict:"
+                ):
+                    logger.info(
+                        "Skipping rebase for issue #%s until conflict error is cleared",
+                        task.issue_number,
+                    )
+                    continue
                 wt = self.workspaces.ensure_worktree(task.issue_number)
                 if self.workspaces.has_changes(wt.path):
                     logger.info(
@@ -679,16 +825,27 @@ class TaskManager:
                     continue
                 if not self.workspaces.needs_rebase_onto_base(wt.path):
                     continue
-                self._rebase_branch(wt.path, wt.branch, push=True)
+                self._rebase_branch(
+                    wt.path,
+                    wt.branch,
+                    push=True,
+                    issue_number=task.issue_number,
+                )
                 self.db.update_task(task.issue_number, last_error=None)
             except Exception as exc:
                 logger.exception(
                     "Auto-rebase failed for issue #%s", task.issue_number
                 )
+                prefix = (
+                    "auto-rebase conflict:"
+                    if "conflict" in str(exc).lower()
+                    or "Conflict" in str(exc)
+                    else "auto-rebase failed:"
+                )
                 try:
                     self.db.update_task(
                         task.issue_number,
-                        last_error=f"auto-rebase failed: {exc}",
+                        last_error=f"{prefix} {exc}",
                     )
                 except KeyError:
                     pass

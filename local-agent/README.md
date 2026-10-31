@@ -15,7 +15,7 @@ Implemented through **functional requirements 1–6**:
 5. PR conversation / inline review / submitted-review monitoring (trusted users only)
 6. Batched feedback re-runs on the **existing** branch/PR (no second PR)
 
-Also: **auto-rebase** onto `origin/{BASE_BRANCH}` when the parent moves (before/after agent runs, and during reconcile for idle open PRs). Conflicts abort the rebase and fail the task/update; successful rewrites push with `--force-with-lease`.
+Also: **auto-rebase** onto `origin/{BASE_BRANCH}` when the parent moves (before/after agent runs, and during reconcile for idle open PRs). On conflicts, Cursor Agent resolves markers, then the controller runs `git rebase --continue` (up to several rounds) and force-pushes with lease. Hard conflict failures set `last_error` and skip reconcile retries until cleared (e.g. by a feedback run).
 
 **Partial:** lifecycle cleanup (8) — merge/close detection only; worktree cleanup not automated yet.
 
@@ -65,7 +65,7 @@ Create these labels in the GitHub repository:
 | `DATABASE_PATH` | SQLite file path |
 | `LOG_DIR` | Agent/test/controller logs |
 | `COMMIT_MESSAGE_PREFIX` | Prefix for controller commits (default `agent:`) |
-| `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | Author identity for agent commits (push can still use your `gh` account) |
+| `COMMIT_GIT_AUTHOR_NAME` / `COMMIT_GIT_AUTHOR_EMAIL` | Author identity for agent commits only (do not use blank `GIT_COMMITTER_*` in `.env`) |
 | `COMMIT_CO_AUTHORED_BY` | Optional `Name <email>` trailer; empty disables it |
 
 Commit subjects: the agent writes `.local-agent-commit-message`; the controller reads it, deletes it, then commits with your `agent:` prefix / author / trailer (template fallback if missing).

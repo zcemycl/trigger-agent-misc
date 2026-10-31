@@ -34,6 +34,8 @@ class RebaseResult:
     already_up_to_date: bool
     base_ref: str
     aborted_on_conflict: bool = False
+    conflict_in_progress: bool = False
+    detail: str = ""
 
 
 class WorkspaceManager:
@@ -108,8 +110,17 @@ class WorkspaceManager:
         workdir = cwd or self.source_repo
         logger.debug("git %s (cwd=%s)", " ".join(shlex.quote(a) for a in args), workdir)
         run_env = os.environ.copy()
+        # Never pass blank git identity vars (dotenv `GIT_COMMITTER_NAME=` breaks rebase).
+        for key in (
+            "GIT_AUTHOR_NAME",
+            "GIT_AUTHOR_EMAIL",
+            "GIT_COMMITTER_NAME",
+            "GIT_COMMITTER_EMAIL",
+        ):
+            if key in run_env and not str(run_env.get(key, "")).strip():
+                run_env.pop(key, None)
         if env:
-            run_env.update(env)
+            run_env.update({k: v for k, v in env.items() if v.strip()})
         result = subprocess.run(
             cmd,
             cwd=workdir,
@@ -360,18 +371,69 @@ class WorkspaceManager:
             raise WorkspaceError(f"Base ref {base} not found in {worktree}")
         return not self.is_ancestor(worktree, base, "HEAD")
 
-    def rebase_onto_base(self, worktree: Path, *, fetch: bool = True) -> RebaseResult:
+    def _git_path(self, worktree: Path, name: str) -> Path:
+        result = self._git(["rev-parse", "--git-path", name], cwd=worktree)
+        path = Path(result.stdout.strip())
+        if not path.is_absolute():
+            path = worktree / path
+        return path
+
+    def is_rebase_in_progress(self, worktree: Path) -> bool:
+        return self._git_path(worktree, "rebase-merge").exists() or self._git_path(
+            worktree, "rebase-apply"
+        ).exists()
+
+    def conflicted_files(self, worktree: Path) -> list[str]:
+        result = self._git(
+            ["diff", "--name-only", "--diff-filter=U"],
+            cwd=worktree,
+            check=False,
+        )
+        return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+    def abort_rebase(self, worktree: Path) -> None:
+        if self.is_rebase_in_progress(worktree):
+            self._git(["rebase", "--abort"], cwd=worktree, check=False)
+
+    def continue_rebase(self, worktree: Path) -> subprocess.CompletedProcess[str]:
+        """Continue an in-progress rebase without opening an editor."""
+        env = {
+            "GIT_EDITOR": "true",
+            "GIT_SEQUENCE_EDITOR": "true",
+        }
+        # Rebase continue creates commits; use agent commit identity when configured.
+        env.update(self.config.git_commit_env())
+        return self._git(
+            ["rebase", "--continue"],
+            cwd=worktree,
+            check=False,
+            env=env,
+        )
+
+    def stage_paths(self, worktree: Path, paths: list[str] | None = None) -> None:
+        if paths:
+            self._git(["add", "--", *paths], cwd=worktree)
+        else:
+            self._git(["add", "-A"], cwd=worktree)
+
+    def rebase_onto_base(
+        self,
+        worktree: Path,
+        *,
+        fetch: bool = True,
+        abort_on_conflict: bool = True,
+    ) -> RebaseResult:
         """
         Rebase the worktree branch onto origin/BASE_BRANCH when the parent moved.
 
-        On conflict: aborts the rebase and raises WorkspaceError.
-        Requires a clean working tree.
+        When abort_on_conflict is False and git stops for conflicts, leaves the
+        rebase in progress so a resolver can fix files and continue.
         """
         if fetch:
             self.fetch_origin()
 
         base = self.base_ref()
-        if self.has_changes(worktree):
+        if self.has_changes(worktree) and not self.is_rebase_in_progress(worktree):
             raise WorkspaceError(
                 f"Cannot rebase {worktree}: working tree has uncommitted changes"
             )
@@ -386,18 +448,30 @@ class WorkspaceManager:
 
         logger.info("Rebasing %s onto %s", worktree, base)
         result = self._git(["rebase", base], cwd=worktree, check=False)
-        if result.returncode != 0:
-            self._git(["rebase", "--abort"], cwd=worktree, check=False)
-            detail = (result.stderr or result.stdout).strip()
-            raise WorkspaceError(
-                f"Rebase onto {base} failed in {worktree} (aborted): {detail}"
+        if result.returncode == 0:
+            logger.info("Rebase onto %s succeeded in %s", base, worktree)
+            return RebaseResult(
+                changed=True,
+                already_up_to_date=False,
+                base_ref=base,
             )
 
-        logger.info("Rebase onto %s succeeded in %s", base, worktree)
-        return RebaseResult(
-            changed=True,
-            already_up_to_date=False,
-            base_ref=base,
+        detail = (result.stderr or result.stdout).strip()
+        if self.is_rebase_in_progress(worktree) and not abort_on_conflict:
+            logger.warning(
+                "Rebase onto %s paused for conflicts in %s", base, worktree
+            )
+            return RebaseResult(
+                changed=False,
+                already_up_to_date=False,
+                base_ref=base,
+                conflict_in_progress=True,
+                detail=detail,
+            )
+
+        self.abort_rebase(worktree)
+        raise WorkspaceError(
+            f"Rebase onto {base} failed in {worktree} (aborted): {detail}"
         )
 
     def commit_all(

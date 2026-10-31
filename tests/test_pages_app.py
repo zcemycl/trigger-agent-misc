@@ -31,9 +31,7 @@ def test_app_uses_react_typescript_and_tailwind() -> None:
 
 
 def test_pages_workflow_deploys_gh_pages_branch() -> None:
-    workflow = (REPO_ROOT / ".github/workflows/pages.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (REPO_ROOT / ".github/workflows/pages.yml").read_text(encoding="utf-8")
     assert "working-directory: src/app" in workflow
     assert "npm run build" in workflow
     assert "publish_branch: gh-pages" in workflow

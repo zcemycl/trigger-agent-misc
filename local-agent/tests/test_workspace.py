@@ -151,6 +151,23 @@ def test_rebase_onto_base_when_parent_moves(tmp_path: Path) -> None:
     assert (info.path / "feature.txt").exists()
 
 
+def test_get_diff_omits_lockfiles_and_truncates(tmp_path: Path) -> None:
+    source = tmp_path / "repo"
+    _init_repo(source)
+    mgr = WorkspaceManager(_config(tmp_path, source))
+    info = mgr.ensure_worktree(4)
+    (info.path / "app.py").write_text("print('hi')\n", encoding="utf-8")
+    (info.path / "uv.lock").write_text("x" * 5000 + "\n", encoding="utf-8")
+    assert mgr.commit_all(info.path, "add files") is True
+
+    diff = mgr.get_diff(info.path, max_chars=10_000)
+    assert "app.py" in diff
+    assert "Omitted large/binary paths" in diff
+    assert "uv.lock" in diff
+    # Full lockfile body should not be embedded.
+    assert "x" * 5000 not in diff
+
+
 def test_rebase_onto_base_aborts_on_conflict(tmp_path: Path) -> None:
     source = tmp_path / "repo"
     _init_repo(source)

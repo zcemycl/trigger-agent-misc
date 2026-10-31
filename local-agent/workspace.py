@@ -175,10 +175,112 @@ class WorkspaceManager:
     def base_ref(self) -> str:
         return f"origin/{self.config.base_branch}"
 
-    def get_diff(self, worktree: Path, *, against: str | None = None) -> str:
+    # Paths whose full patch content blows up prompts / argv limits.
+    _OMIT_DIFF_BASENAMES = frozenset(
+        {
+            "uv.lock",
+            "package-lock.json",
+            "yarn.lock",
+            "pnpm-lock.yaml",
+            "Cargo.lock",
+            "poetry.lock",
+            "Gemfile.lock",
+            "composer.lock",
+            "Pipfile.lock",
+        }
+    )
+    _OMIT_DIFF_SUFFIXES = (
+        ".min.js",
+        ".min.css",
+        ".map",
+        ".wasm",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".webp",
+        ".pdf",
+        ".zip",
+        ".gz",
+        ".whl",
+    )
+
+    def get_diff(
+        self,
+        worktree: Path,
+        *,
+        against: str | None = None,
+        max_chars: int = 80_000,
+    ) -> str:
+        """
+        Return a compact diff suitable for agent prompts.
+
+        Omits lockfile/binary-ish patches and truncates to max_chars so the
+        controller never builds an argv/prompt that hits OS ARG_MAX.
+        """
         base = against or self.base_ref()
-        result = self._git(["diff", f"{base}...HEAD"], cwd=worktree, check=False)
-        return result.stdout
+        names = self._git(
+            ["diff", "--name-status", f"{base}...HEAD"],
+            cwd=worktree,
+            check=False,
+        )
+        if not names.stdout.strip():
+            return ""
+
+        parts: list[str] = []
+        omitted: list[str] = []
+        total = 0
+        truncated = False
+
+        for line in names.stdout.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            cols = line.split("\t")
+            status = cols[0]
+            path = cols[-1]
+            base_name = Path(path).name
+            if (
+                base_name in self._OMIT_DIFF_BASENAMES
+                or path.endswith(self._OMIT_DIFF_SUFFIXES)
+            ):
+                omitted.append(f"{status} {path}")
+                continue
+
+            file_diff = self._git(
+                ["diff", f"{base}...HEAD", "--", path],
+                cwd=worktree,
+                check=False,
+            ).stdout
+            if not file_diff:
+                # Renames / mode-only: keep the name-status line.
+                parts.append(f"{status}\t{path}")
+                continue
+            if total + len(file_diff) > max_chars:
+                truncated = True
+                remaining = max_chars - total
+                if remaining > 200:
+                    parts.append(file_diff[:remaining] + "\n... [diff truncated] ...\n")
+                    total = max_chars
+                break
+            parts.append(file_diff)
+            total += len(file_diff)
+
+        summary_bits: list[str] = []
+        if omitted:
+            summary_bits.append(
+                "Omitted large/binary paths (inspect locally if needed):\n"
+                + "\n".join(f"  - {item}" for item in omitted)
+            )
+        if truncated:
+            summary_bits.append(
+                f"Diff truncated to ~{max_chars} characters for prompt size limits."
+            )
+        body = "\n".join(parts).strip()
+        if summary_bits:
+            header = "\n".join(summary_bits) + "\n\n"
+            return header + body
+        return body
 
     def status_porcelain(self, worktree: Path) -> str:
         result = self._git(["status", "--porcelain"], cwd=worktree)

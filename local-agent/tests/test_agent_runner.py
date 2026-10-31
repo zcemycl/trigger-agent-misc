@@ -78,6 +78,37 @@ def test_run_tests_success_and_logs(tmp_path: Path) -> None:
     assert result.log_path.exists()
 
 
+def test_run_agent_uses_prompt_file_not_full_argv(tmp_path: Path) -> None:
+    (tmp_path / "logs").mkdir()
+    runner = AgentRunner(_config(tmp_path))
+    huge = "HUGE_PROMPT_MARKER_" + ("x" * 50_000)
+    captured: list[list[str]] = []
+
+    def fake_run_command(command, **kwargs):  # type: ignore[no-untyped-def]
+        captured.append(command)
+        from agent_runner import CommandResult
+
+        return CommandResult(
+            command=command,
+            exit_code=0,
+            stdout="ok",
+            stderr="",
+            timed_out=False,
+            duration_seconds=0.01,
+        )
+
+    runner.run_command = fake_run_command  # type: ignore[method-assign]
+    result = runner.run_agent(worktree=tmp_path, prompt=huge, issue_number=7)
+    assert result.exit_code == 0
+    assert captured
+    argv_joined = " ".join(captured[0])
+    assert "HUGE_PROMPT_MARKER_" not in argv_joined
+    assert "instruction file" in argv_joined.lower() or "Read the instruction file" in argv_joined
+    prompt_files = list((tmp_path / "logs").glob("issue-7-prompt-*.md"))
+    assert len(prompt_files) == 1
+    assert "HUGE_PROMPT_MARKER_" in prompt_files[0].read_text(encoding="utf-8")
+
+
 def test_worktree_lock_prevents_parallel_agents(tmp_path: Path) -> None:
     cfg = _config(tmp_path)
     # Use a long-running python one-liner via agent_extra_args hack:

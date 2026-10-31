@@ -62,3 +62,36 @@ def test_app_has_format_and_test_scripts() -> None:
     assert scripts.get("format:check") == "prettier --check ."
     assert scripts.get("test") == "vitest run"
     assert (APP_ROOT / "src" / "App.test.tsx").is_file()
+
+
+def test_app_includes_interactive_line_search_demos() -> None:
+    concepts = (APP_ROOT / "src" / "components" / "LineSearchConcepts.tsx").read_text(
+        encoding="utf-8"
+    )
+    for title in (
+        "Exact line search",
+        "Backtracking line search",
+        "Armijo condition",
+        "Wolfe conditions",
+        "Strong Wolfe conditions",
+        "Goldstein conditions",
+    ):
+        assert title in concepts
+    assert (APP_ROOT / "src" / "lineSearch.ts").is_file()
+    assert "MathBlock" in concepts
+
+
+def test_app_uses_sidebar_for_line_search_chapters() -> None:
+    concepts = (APP_ROOT / "src" / "components" / "LineSearchConcepts.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "LINE_SEARCH_CHAPTER" in concepts
+    assert "Line search" in concepts
+    assert "LINE_SEARCH_PAGES" in concepts
+    assert "aria-label={`${LINE_SEARCH_CHAPTER} concepts`}" in concepts
+
+
+def test_app_renders_latex_equations_for_line_search() -> None:
+    pkg = json.loads((APP_ROOT / "package.json").read_text(encoding="utf-8"))
+    assert "katex" in pkg.get("dependencies", {})
+    assert (APP_ROOT / "src" / "components" / "MathBlock.tsx").is_file()

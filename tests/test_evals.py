@@ -11,5 +11,20 @@ def test_quadratic_eval_passes() -> None:
 
 def test_run_all_includes_benchmarks() -> None:
     results = run_all()
-    assert set(results) == {"quadratic", "rosenbrock_origin"}
+    expected = {
+        "exact_quadratic",
+        "backtracking_armijo",
+        "armijo_condition",
+        "wolfe",
+        "strong_wolfe",
+        "goldstein",
+        "quadratic",
+        "rosenbrock_origin",
+    }
+    assert set(results) == expected
     assert results["rosenbrock_origin"]["decreased_objective"] is True
+    assert results["exact_quadratic"]["alpha_near_optimum"] is True
+    assert results["armijo_condition"]["armijo_at_good"] is True
+    assert results["wolfe"]["wolfe_curvature_holds"] is True
+    assert results["strong_wolfe"]["strong_wolfe_holds"] is True
+    assert results["goldstein"]["goldstein_holds"] is True

@@ -78,3 +78,10 @@ def test_app_includes_interactive_line_search_demos() -> None:
     ):
         assert title in concepts
     assert (APP_ROOT / "src" / "lineSearch.ts").is_file()
+    assert "MathBlock" in concepts
+
+
+def test_app_renders_latex_equations_for_line_search() -> None:
+    pkg = json.loads((APP_ROOT / "package.json").read_text(encoding="utf-8"))
+    assert "katex" in pkg.get("dependencies", {})
+    assert (APP_ROOT / "src" / "components" / "MathBlock.tsx").is_file()

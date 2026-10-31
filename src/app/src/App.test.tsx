@@ -27,5 +27,8 @@ describe("App", () => {
       screen.getByRole("heading", { name: "Goldstein conditions" }),
     ).toBeInTheDocument();
     expect(screen.getAllByRole("slider").length).toBeGreaterThanOrEqual(6);
+    expect(screen.getAllByTestId("math-block").length).toBeGreaterThanOrEqual(
+      7,
+    );
   });
 });

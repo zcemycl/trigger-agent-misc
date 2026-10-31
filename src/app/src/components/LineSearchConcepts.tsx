@@ -17,15 +17,18 @@ import {
   quadraticPhi,
   quadraticPhiPrime,
 } from "../quadratic";
+import { MathBlock } from "./MathBlock";
 import { PhiChart } from "./PhiChart";
 
 function Section({
   title,
   description,
+  equations,
   children,
 }: {
   title: string;
   description: string;
+  equations?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -34,6 +37,7 @@ function Section({
       <p className="mt-2 text-sm leading-relaxed text-slate-400">
         {description}
       </p>
+      {equations ? <div className="mt-4 space-y-3">{equations}</div> : null}
       <div className="mt-5 space-y-4">{children}</div>
     </section>
   );
@@ -63,7 +67,13 @@ function ExactLineSearchDemo() {
   return (
     <Section
       title="Exact line search"
-      description="Golden-section search finds the minimizer of unimodal φ(α) on a bracket [a, b]. Drag the upper bracket bound, then run search."
+      description="Golden-section search finds the minimizer of a unimodal ray on a bracket. Drag the upper bracket bound to see the search interval."
+      equations={
+        <>
+          <MathBlock tex="\varphi(\alpha) = f(\mathbf{x} + \alpha \mathbf{p})" />
+          <MathBlock tex="\alpha^* = \arg\min_{\alpha \in [a,\, b]} \varphi(\alpha)" />
+        </>
+      }
     >
       <label className="flex flex-col gap-1 text-sm text-slate-300">
         Upper bracket b = {bracketHi.toFixed(2)}
@@ -114,7 +124,13 @@ function BacktrackingDemo() {
   return (
     <Section
       title="Backtracking line search"
-      description="Start with a trial step α₀; shrink by factor ρ until the Armijo sufficient-decrease condition holds."
+      description="Start with a trial step and shrink until a sufficient-decrease test passes."
+      equations={
+        <>
+          <MathBlock tex="\alpha_0 > 0,\quad \rho \in (0,\, 1)" />
+          <MathBlock tex="\alpha_{k+1} = \rho\,\alpha_k \quad \text{until Armijo holds}" />
+        </>
+      }
     >
       <label className="flex flex-col gap-1 text-sm text-slate-300">
         Initial step α₀ = {alpha0.toFixed(2)}
@@ -163,7 +179,13 @@ function ArmijoDemo() {
   return (
     <Section
       title="Armijo condition"
-      description="Sufficient decrease: φ(α) ≤ φ(0) + c₁ α φ′(0). Move α to see when the trial point lies below the Armijo line."
+      description="Armijo (sufficient decrease) requires the trial value to lie on or below a linear model at α = 0. Move α to compare φ(α) with the bound."
+      equations={
+        <>
+          <MathBlock tex="0 < c_1 < 1" />
+          <MathBlock tex="\varphi(\alpha) \le \varphi(0) + c_1\,\alpha\,\varphi'(0)" />
+        </>
+      }
     >
       <label className="flex flex-col gap-1 text-sm text-slate-300">
         Trial step α = {alpha.toFixed(2)}
@@ -217,7 +239,18 @@ function WolfeDemo() {
   return (
     <Section
       title="Wolfe conditions"
-      description="Weak Wolfe pairs Armijo with curvature φ′(α) ≥ c₂ φ′(0). Explore α manually or compare with the Wolfe line search result."
+      description="Weak Wolfe line search accepts a step only when both sufficient decrease and a curvature inequality hold."
+      equations={
+        <>
+          <MathBlock tex="0 < c_1 < c_2 < 1" />
+          <MathBlock
+            tex={`\\begin{aligned}
+\\varphi(\\alpha) &\\le \\varphi(0) + c_1\\,\\alpha\\,\\varphi'(0) \\\\
+\\varphi'(\\alpha) &\\ge c_2\\,\\varphi'(0)
+\\end{aligned}`}
+          />
+        </>
+      }
     >
       <label className="flex flex-col gap-1 text-sm text-slate-300">
         Trial step α = {alpha.toFixed(2)}
@@ -282,7 +315,18 @@ function StrongWolfeDemo() {
   return (
     <Section
       title="Strong Wolfe conditions"
-      description="Strong curvature requires |φ′(α)| ≤ c₂ |φ′(0)|, giving a more restrictive step near the minimizer."
+      description="Strong Wolfe replaces the weak curvature inequality with a bound on |φ′(α)|, which is tighter near a minimizer."
+      equations={
+        <>
+          <MathBlock tex="0 < c_1 < c_2 < 1" />
+          <MathBlock
+            tex={`\\begin{aligned}
+\\varphi(\\alpha) &\\le \\varphi(0) + c_1\\,\\alpha\\,\\varphi'(0) \\\\
+|\\varphi'(\\alpha)| &\\le c_2\\,|\\varphi'(0)|
+\\end{aligned}`}
+          />
+        </>
+      }
     >
       <label className="flex flex-col gap-1 text-sm text-slate-300">
         Trial step α = {alpha.toFixed(2)}
@@ -337,7 +381,17 @@ function GoldsteinDemo() {
   return (
     <Section
       title="Goldstein conditions"
-      description="φ(α) must lie in [φ(0) + (1−c)αφ′(0), φ(0) + cαφ′(0)]. The yellow segment shows the acceptable interval at your α."
+      description="Goldstein bounds φ(α) between two linear models; the yellow segment on the chart is that interval at your trial α."
+      equations={
+        <>
+          <MathBlock tex="0 < c < \tfrac{1}{2}" />
+          <MathBlock
+            tex={`\\varphi(0) + (1-c)\\,\\alpha\\,\\varphi'(0)
+\\;\\le\\; \\varphi(\\alpha)
+\\;\\le\\; \\varphi(0) + c\\,\\alpha\\,\\varphi'(0)`}
+          />
+        </>
+      }
     >
       <label className="flex flex-col gap-1 text-sm text-slate-300">
         Trial step α = {alpha.toFixed(2)}
@@ -376,14 +430,18 @@ function GoldsteinDemo() {
 export function LineSearchConcepts() {
   return (
     <div className="space-y-8">
-      <p className="text-slate-400">
-        Interactive demos use the ray φ(α) = (1 − α)² with φ′(0) = −2, matching
-        the Python examples in{" "}
-        <code className="rounded bg-slate-800 px-1.5 py-0.5 text-emerald-300">
-          trigger_agent_misc.optimization
-        </code>
-        .
-      </p>
+      <div className="space-y-3 text-slate-400">
+        <p>
+          Interactive demos use the same quadratic ray as the Python evals in{" "}
+          <code className="rounded bg-slate-800 px-1.5 py-0.5 text-emerald-300">
+            trigger_agent_misc.optimization
+          </code>
+          .
+        </p>
+        <MathBlock
+          tex={`\\varphi(\\alpha) = (1-\\alpha)^2, \\qquad \\varphi'(0) = -2`}
+        />
+      </div>
       <ExactLineSearchDemo />
       <BacktrackingDemo />
       <ArmijoDemo />

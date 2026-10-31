@@ -81,6 +81,16 @@ def test_app_includes_interactive_line_search_demos() -> None:
     assert "MathBlock" in concepts
 
 
+def test_app_uses_sidebar_for_line_search_chapters() -> None:
+    concepts = (APP_ROOT / "src" / "components" / "LineSearchConcepts.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "LINE_SEARCH_CHAPTER" in concepts
+    assert "Line search" in concepts
+    assert "LINE_SEARCH_PAGES" in concepts
+    assert "aria-label={`${LINE_SEARCH_CHAPTER} concepts`}" in concepts
+
+
 def test_app_renders_latex_equations_for_line_search() -> None:
     pkg = json.loads((APP_ROOT / "package.json").read_text(encoding="utf-8"))
     assert "katex" in pkg.get("dependencies", {})

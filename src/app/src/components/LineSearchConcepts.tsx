@@ -427,27 +427,88 @@ function GoldsteinDemo() {
   );
 }
 
-export function LineSearchConcepts() {
+export const LINE_SEARCH_CHAPTER = "Line search";
+
+export const LINE_SEARCH_PAGES = [
+  { id: "exact", title: "Exact line search", Demo: ExactLineSearchDemo },
+  {
+    id: "backtracking",
+    title: "Backtracking line search",
+    Demo: BacktrackingDemo,
+  },
+  { id: "armijo", title: "Armijo condition", Demo: ArmijoDemo },
+  { id: "wolfe", title: "Wolfe conditions", Demo: WolfeDemo },
+  {
+    id: "strong-wolfe",
+    title: "Strong Wolfe conditions",
+    Demo: StrongWolfeDemo,
+  },
+  { id: "goldstein", title: "Goldstein conditions", Demo: GoldsteinDemo },
+] as const;
+
+export type LineSearchPageId = (typeof LINE_SEARCH_PAGES)[number]["id"];
+
+function ConceptIntro() {
   return (
-    <div className="space-y-8">
-      <div className="space-y-3 text-slate-400">
-        <p>
-          Interactive demos use the same quadratic ray as the Python evals in{" "}
-          <code className="rounded bg-slate-800 px-1.5 py-0.5 text-emerald-300">
-            trigger_agent_misc.optimization
-          </code>
-          .
+    <div className="mb-6 space-y-3 text-slate-400">
+      <p className="text-sm leading-relaxed">
+        Interactive demos use the same quadratic ray as the Python evals in{" "}
+        <code className="rounded bg-slate-800 px-1.5 py-0.5 text-emerald-300">
+          trigger_agent_misc.optimization
+        </code>
+        .
+      </p>
+      <MathBlock
+        tex={`\\varphi(\\alpha) = (1-\\alpha)^2, \\qquad \\varphi'(0) = -2`}
+      />
+    </div>
+  );
+}
+
+export function LineSearchConcepts({
+  initialPageId = "exact",
+}: {
+  initialPageId?: LineSearchPageId;
+}) {
+  const [activeId, setActiveId] = useState<LineSearchPageId>(initialPageId);
+  const activePage =
+    LINE_SEARCH_PAGES.find((p) => p.id === activeId) ?? LINE_SEARCH_PAGES[0];
+  const ActiveDemo = activePage.Demo;
+
+  return (
+    <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
+      <aside className="w-full shrink-0 lg:sticky lg:top-6 lg:w-56">
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          {LINE_SEARCH_CHAPTER}
         </p>
-        <MathBlock
-          tex={`\\varphi(\\alpha) = (1-\\alpha)^2, \\qquad \\varphi'(0) = -2`}
-        />
+        <nav
+          className="mt-3 flex flex-col gap-1"
+          aria-label={`${LINE_SEARCH_CHAPTER} concepts`}
+        >
+          {LINE_SEARCH_PAGES.map((page) => {
+            const isActive = page.id === activeId;
+            return (
+              <button
+                key={page.id}
+                type="button"
+                onClick={() => setActiveId(page.id)}
+                aria-current={isActive ? "page" : undefined}
+                className={`rounded-lg px-3 py-2 text-left text-sm transition ${
+                  isActive
+                    ? "bg-emerald-500/15 font-medium text-emerald-200"
+                    : "text-slate-400 hover:bg-slate-800/80 hover:text-slate-200"
+                }`}
+              >
+                {page.title}
+              </button>
+            );
+          })}
+        </nav>
+      </aside>
+      <div className="min-w-0 flex-1">
+        <ConceptIntro />
+        <ActiveDemo />
       </div>
-      <ExactLineSearchDemo />
-      <BacktrackingDemo />
-      <ArmijoDemo />
-      <WolfeDemo />
-      <StrongWolfeDemo />
-      <GoldsteinDemo />
     </div>
   );
 }

@@ -36,3 +36,6 @@ def test_pages_workflow_deploys_gh_pages_branch() -> None:
     assert "npm run build" in workflow
     assert "publish_branch: gh-pages" in workflow
     assert "peaceiris/actions-gh-pages" in workflow
+    assert "branches: [main]" in workflow
+    assert "workflow_dispatch" not in workflow
+    assert "refs/heads/main" in workflow

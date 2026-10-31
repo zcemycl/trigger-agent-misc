@@ -3,10 +3,6 @@ name: Deploy GitHub Pages
 on:
   push:
     branches: [main]
-  workflow_dispatch:
-
-permissions:
-  contents: write
 
 concurrency:
   group: pages-${{ github.ref }}
@@ -16,6 +12,8 @@ jobs:
   build-and-deploy:
     name: Build React app and publish gh-pages
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: src/app
@@ -38,6 +36,7 @@ jobs:
         run: npm run build
 
       - name: Deploy to gh-pages branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

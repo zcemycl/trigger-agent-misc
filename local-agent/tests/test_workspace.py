@@ -110,6 +110,51 @@ def test_commit_all_and_refuse_path_collision(tmp_path: Path) -> None:
         mgr.ensure_worktree(9)
 
 
+def test_commit_all_retries_when_pre_commit_rewrites(tmp_path: Path) -> None:
+    source = tmp_path / "repo"
+    _init_repo(source)
+    # Install a failing-then-pass hook simulator via PATH override is heavy;
+    # exercise the rewrite detector + retry path with a fake _git instead.
+    mgr = WorkspaceManager(_config(tmp_path, source))
+    info = mgr.ensure_worktree(10)
+    (info.path / "feature.txt").write_text("x\n", encoding="utf-8")
+
+    calls: list[list[str]] = []
+    real_git = mgr._git
+
+    def fake_git(args, **kwargs):  # type: ignore[no-untyped-def]
+        calls.append(list(args))
+        if args[:1] == ["commit"]:
+            commit_attempts = sum(1 for c in calls if c[:1] == ["commit"])
+            if commit_attempts == 1:
+                return subprocess.CompletedProcess(
+                    args=["git", *args],
+                    returncode=1,
+                    stdout="",
+                    stderr=(
+                        "black................................................Failed\n"
+                        "- hook id: black\n"
+                        "- files were modified by this hook\n"
+                        "reformatted feature.txt\n"
+                    ),
+                )
+            return real_git(args, **kwargs)
+        return real_git(args, **kwargs)
+
+    mgr._git = fake_git  # type: ignore[method-assign]
+    # After the fake failure, simulate hook rewrite so retry has something staged.
+    (info.path / "feature.txt").write_text("x\n", encoding="utf-8")
+    assert mgr.commit_all(info.path, "msg", max_hook_retries=1) is True
+    assert sum(1 for c in calls if c[:1] == ["commit"]) >= 2
+
+
+def test_pre_commit_rewrote_files_detector() -> None:
+    assert WorkspaceManager._pre_commit_rewrote_files(
+        "files were modified by this hook\nreformatted a.py\n"
+    )
+    assert not WorkspaceManager._pre_commit_rewrote_files("flake8 failed\nerror")
+
+
 def _advance_main(source: Path, text: str) -> None:
     subprocess.run(
         ["git", "checkout", "main"],

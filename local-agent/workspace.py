@@ -474,37 +474,81 @@ class WorkspaceManager:
             f"Rebase onto {base} failed in {worktree} (aborted): {detail}"
         )
 
+    @staticmethod
+    def _pre_commit_rewrote_files(output: str) -> bool:
+        """True when pre-commit/format hooks failed after rewriting files."""
+        lower = output.lower()
+        markers = (
+            "files were modified by this hook",
+            "reformatted",
+            "fixed by",
+            "hook id: black",
+            "hook id: prettier",
+            "hook id: isort",
+            "hook id: ruff",
+        )
+        return any(marker in lower for marker in markers)
+
     def commit_all(
         self,
         worktree: Path,
         message: str,
         *,
         env: Optional[dict[str, str]] = None,
+        max_hook_retries: int = 2,
     ) -> bool:
-        """Stage all changes and commit. Returns False if there was nothing to commit."""
-        self._git(["add", "-A"], cwd=worktree)
-        if not self.has_changes(worktree):
-            # After add, check for staged changes specifically.
+        """
+        Stage all changes and commit.
+
+        Retries when local pre-commit hooks rewrite files (black/prettier/etc.)
+        and reject the first commit attempt — a common autofix pattern.
+        """
+        commit_env = env if env is not None else self.config.git_commit_env()
+        last_output = ""
+        total_attempts = max_hook_retries + 1
+
+        for attempt in range(1, total_attempts + 1):
+            self._git(["add", "-A"], cwd=worktree)
             staged = self._git(["diff", "--cached", "--name-only"], cwd=worktree)
             if not staged.stdout.strip():
-                logger.info("No changes to commit in %s", worktree)
+                logger.info("No staged changes to commit in %s", worktree)
                 return False
-        commit_env = env if env is not None else self.config.git_commit_env()
-        # Prefer a single -m with body; fall back to -F via stdin for multiline.
-        result = self._git(
-            ["commit", "-m", message],
-            cwd=worktree,
-            check=False,
-            env=commit_env,
-        )
-        if result.returncode != 0:
-            combined = f"{result.stderr}\n{result.stdout}"
-            if "nothing to commit" in combined.lower():
-                return False
-            raise WorkspaceError(
-                f"git commit failed in {worktree}: {combined.strip()}"
+
+            result = self._git(
+                ["commit", "-m", message],
+                cwd=worktree,
+                check=False,
+                env=commit_env,
             )
-        return True
+            if result.returncode == 0:
+                if attempt > 1:
+                    logger.info(
+                        "Commit succeeded in %s after pre-commit autofix retry",
+                        worktree,
+                    )
+                return True
+
+            last_output = f"{result.stderr}\n{result.stdout}".strip()
+            if "nothing to commit" in last_output.lower():
+                return False
+
+            hooks_rewrote = self._pre_commit_rewrote_files(last_output)
+            dirty_after = self.has_changes(worktree)
+            if attempt < total_attempts and (hooks_rewrote or dirty_after):
+                logger.warning(
+                    "Commit blocked by formatting hooks in %s "
+                    "(attempt %s/%s); re-staging and retrying",
+                    worktree,
+                    attempt,
+                    total_attempts,
+                )
+                continue
+
+            break
+
+        raise WorkspaceError(
+            f"git commit failed in {worktree}: {last_output}"
+        )
 
     def push_branch(
         self,

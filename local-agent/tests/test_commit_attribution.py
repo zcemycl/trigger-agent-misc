@@ -83,8 +83,12 @@ def test_format_commit_message_prefix_and_trailer() -> None:
         feedback_batch_seconds=15,
         max_agent_retries=2,
     )
-    msg = cfg.format_commit_message("Implement issue #3")
-    assert msg.startswith("agent: Implement issue #3")
+    msg = cfg.format_commit_message(
+        "#3 feedback (demo.ipynb:1): add latex math",
+        body="- @alice (demo.ipynb:1): add latex math\n",
+    )
+    assert msg.startswith("agent: #3 feedback (demo.ipynb:1): add latex math")
+    assert "@alice" in msg
     assert "Co-authored-by: local-agent <local-agent[bot]@users.noreply.github.com>" in msg
     # Do not double-prefix.
     assert cfg.format_commit_message("agent: already").startswith("agent: already")

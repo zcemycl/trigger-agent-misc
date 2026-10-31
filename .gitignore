@@ -13,3 +13,4 @@ local-agent/.agent_data/
 .ruff_cache/
 .pre-commit-config.yaml.bak
 .ipynb_checkpoints/
+.local-agent-commit-message

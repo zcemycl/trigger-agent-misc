@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 from database import CommentEvent
@@ -155,3 +156,67 @@ def format_feedback_block(events: list[CommentEvent]) -> str:
             hunk = f"\nCode context:\n```\n{event.diff_hunk}\n```"
         parts.append(f"{header}{location}\n\n{event.body}{hunk}")
     return "\n\n---\n\n".join(parts)
+
+
+def _first_line(text: str) -> str:
+    for line in (text or "").splitlines():
+        cleaned = " ".join(line.split())
+        if cleaned:
+            return cleaned
+    return ""
+
+
+def _truncate(text: str, limit: int) -> str:
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    if limit <= 1:
+        return text[:limit]
+    return text[: max(0, limit - 1)].rstrip() + "…"
+
+
+def summarize_feedback_commit(
+    events: list[CommentEvent],
+    *,
+    issue_number: int,
+    pr_number: int,
+    subject_limit: int = 64,
+) -> tuple[str, str]:
+    """
+    Build a descriptive commit subject + body from batched feedback.
+
+    Returns (subject_without_prefix, body). Subject is capped so that with the
+    default `agent:` prefix the full first line stays near ~72 characters.
+    """
+    if not events:
+        return (f"Address PR feedback for issue #{issue_number}", "")
+
+    primary = events[0]
+    snippet = _first_line(primary.body) or "feedback"
+    where = ""
+    if primary.path:
+        where = Path(primary.path).name
+        if primary.line is not None:
+            where = f"{where}:{primary.line}"
+
+    if where:
+        subject = f"#{issue_number} feedback ({where}): {snippet}"
+    elif len(events) == 1:
+        subject = f"#{issue_number} feedback: {snippet}"
+    else:
+        subject = f"#{issue_number} feedback ({len(events)} notes): {snippet}"
+    subject = _truncate(subject, subject_limit)
+
+    body_lines = [
+        f"Respond to trusted review on PR #{pr_number} for issue #{issue_number}.",
+        "",
+    ]
+    for event in events:
+        loc = event.path or ""
+        if event.path and event.line is not None:
+            loc = f"{event.path}:{event.line}"
+        loc_bit = f" ({loc})" if loc else ""
+        body_lines.append(
+            f"- @{event.author}{loc_bit}: {_truncate(_first_line(event.body) or event.comment_type, 120)}"
+        )
+    return subject, "\n".join(body_lines).rstrip() + "\n"

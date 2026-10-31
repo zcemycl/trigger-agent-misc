@@ -10,6 +10,7 @@ from typing import Optional
 from agent_runner import AgentRunner
 from config import Config
 from database import CommentEvent, Database, Task, _utc_now
+from commit_message import consume_agent_commit_message
 from feedback import (
     IncomingComment,
     batch_ready,
@@ -18,6 +19,7 @@ from feedback import (
     normalize_issue_comment,
     normalize_review,
     normalize_review_comment,
+    summarize_feedback_commit,
 )
 from github_client import GitHubClient, Issue
 from workspace import WorkspaceManager
@@ -214,11 +216,17 @@ class TaskManager:
                 )
                 return
 
+            llm_msg = consume_agent_commit_message(wt.path)
+            if llm_msg is not None:
+                subject, body = llm_msg
+            else:
+                subject = f"#{issue.number} implement: {issue.title}".strip()
+                if len(subject) > 64:
+                    subject = subject[:63].rstrip() + "…"
+                body = f"Automated implementation for issue #{issue.number}.\n"
             committed = self.workspaces.commit_all(
                 wt.path,
-                self.config.format_commit_message(
-                    f"Implement issue #{issue.number}"
-                ),
+                self.config.format_commit_message(subject, body=body),
             )
             if not committed:
                 # Agent may have made no file changes — still treat as failure to publish.
@@ -505,11 +513,18 @@ class TaskManager:
                     f"timeout={test_result.timed_out}). Log: {test_result.log_path}"
                 )
 
+            llm_msg = consume_agent_commit_message(wt.path)
+            if llm_msg is not None:
+                subject, body = llm_msg
+            else:
+                subject, body = summarize_feedback_commit(
+                    events,
+                    issue_number=issue_number,
+                    pr_number=task.pr_number,
+                )
             committed = self.workspaces.commit_all(
                 wt.path,
-                self.config.format_commit_message(
-                    f"Address PR feedback for issue #{issue_number}"
-                ),
+                self.config.format_commit_message(subject, body=body),
             )
             if committed:
                 # Rebase again in case base moved during the agent run, then push.

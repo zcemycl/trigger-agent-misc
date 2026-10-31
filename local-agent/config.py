@@ -49,13 +49,15 @@ class Config:
     def repo_slug(self) -> str:
         return f"{self.owner}/{self.repo}"
 
-    def format_commit_message(self, subject: str) -> str:
-        """Build a controller commit message with optional prefix and trailer."""
+    def format_commit_message(self, subject: str, *, body: str | None = None) -> str:
+        """Build a controller commit message with optional prefix, body, and trailer."""
         text = subject.strip()
         prefix = self.commit_message_prefix.strip()
         if prefix:
             if not text.lower().startswith(prefix.lower()):
                 text = f"{prefix} {text}".strip()
+        if body and body.strip():
+            text = f"{text}\n\n{body.strip()}"
         trailer = self.commit_co_authored_by.strip()
         if trailer:
             if not trailer.lower().startswith("co-authored-by:"):

@@ -10,6 +10,7 @@ from feedback import (
     normalize_issue_comment,
     normalize_review,
     normalize_review_comment,
+    summarize_feedback_commit,
 )
 
 
@@ -141,6 +142,31 @@ def test_batch_ready_failed_retry_uses_processed_at() -> None:
     )
     assert batch_ready([event], 15, now=now) is False
     assert batch_ready([event], 15, now=now + timedelta(seconds=20)) is True
+
+
+def test_summarize_feedback_commit_uses_comment_and_path() -> None:
+    event = CommentEvent(
+        comment_id="review_comment:1",
+        pr_number=4,
+        comment_type="review_comment",
+        author="alice",
+        body="I need more latex math equations to explain the optimisation.\n\nThanks.",
+        status="pending",
+        created_at="2026-01-01T00:00:00+00:00",
+        processed_at=None,
+        error=None,
+        path="notebooks/line_search_demo.ipynb",
+        line=1,
+    )
+    subject, body = summarize_feedback_commit(
+        [event], issue_number=3, pr_number=4
+    )
+    assert subject.startswith("#3 feedback (line_search_demo.ipynb:1):")
+    assert "latex math" in subject
+    assert len(subject) <= 64
+    assert "PR #4" in body
+    assert "@alice" in body
+    assert "line_search_demo.ipynb:1" in body
 
 
 def test_format_feedback_includes_inline_location() -> None:

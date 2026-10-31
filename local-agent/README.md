@@ -68,6 +68,8 @@ Create these labels in the GitHub repository:
 | `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | Author identity for agent commits (push can still use your `gh` account) |
 | `COMMIT_CO_AUTHORED_BY` | Optional `Name <email>` trailer; empty disables it |
 
+Commit subjects: the agent is asked to write `.local-agent-commit-message` in the worktree; the controller reads it, deletes the file, then commits with your `agent:` prefix / author / trailer. If the file is missing, a template/summary fallback is used.
+
 Paths and binaries are validated at startup.
 
 ## Run

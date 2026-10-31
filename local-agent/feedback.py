@@ -42,17 +42,23 @@ def is_trusted_human(
     agent_login: str,
     user_payload: Optional[dict[str, Any]] = None,
 ) -> bool:
-    """Only trusted humans may trigger feedback runs."""
+    """
+    Only trusted humans may trigger feedback runs.
+
+    If the controller's gh login is also listed in TRUSTED_GITHUB_USERS (common
+    for solo setups), that account's comments are allowed. Untrusted accounts
+    that match the agent login are still ignored.
+    """
     if not trusted_users:
         return False
     name = (login or "").strip().lstrip("@").lower()
     if not name:
         return False
-    if name == agent_login.strip().lstrip("@").lower():
-        return False
     if is_bot_author(name, user_payload):
         return False
-    return name in trusted_users
+    # Trusted list is authoritative, including solo setups where `agent_login`
+    # is the same GitHub user as the human reviewer.
+    return name in trusted_users  # agent_login intentionally not a blocker here
 
 
 @dataclass(frozen=True)

@@ -18,7 +18,8 @@ def test_is_trusted_human_filters_bots_and_agent() -> None:
     assert is_trusted_human(
         "alice", trusted_users=trusted, agent_login="agent-bot"
     )
-    assert not is_trusted_human(
+    # Solo setup: trusted human may be the same gh account as the controller.
+    assert is_trusted_human(
         "alice", trusted_users=trusted, agent_login="alice"
     )
     assert not is_trusted_human(
@@ -32,6 +33,10 @@ def test_is_trusted_human_filters_bots_and_agent() -> None:
     )
     assert not is_trusted_human(
         "alice", trusted_users=frozenset(), agent_login="agent"
+    )
+    # Agent login alone is not enough without TRUSTED_GITHUB_USERS.
+    assert not is_trusted_human(
+        "agent-bot", trusted_users=trusted, agent_login="agent-bot"
     )
 
 

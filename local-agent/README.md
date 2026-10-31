@@ -93,7 +93,7 @@ Agent work runs in a thread pool so polling continues while `agent` is busy.
 3. Comment on the PR (conversation), leave an inline review comment, or submit a review with a body.
 4. The controller batches new feedback for `FEEDBACK_BATCH_SECONDS` (default 15), then re-runs the agent in the existing worktree, runs tests, commits, and pushes — **without** opening a new PR.
 
-Ignored: bots, the agent’s own GitHub user, untrusted users, duplicates, and comments on closed/merged PRs.
+Ignored: bots, untrusted users, duplicates, and comments on closed/merged PRs. If your `gh` login is also in `TRUSTED_GITHUB_USERS` (solo setups), your comments still count.
 
 ## Flow (requirements 1–4)
 

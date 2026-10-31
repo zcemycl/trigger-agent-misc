@@ -1,0 +1,32 @@
+---
+description: Python style, layout, and tooling conventions for this repository
+globs: **/*.py
+alwaysApply: false
+---
+
+# Python best practices (this repo)
+
+## Layout
+
+- Repository-owned application code lives under `src/` (import path `trigger_agent_misc`).
+- Tests live in root `tests/`; evaluation scripts in `evals/`; notebooks in `notebooks/`.
+- Do not change `local-agent/` unless an issue explicitly requires it; that tree is a separate subproject with its own `pyproject.toml` and tests.
+
+## Style and tools
+
+- Format with **Black** (88 columns) and sort imports with **isort** (Black profile).
+- Lint with **flake8**; configuration is in root `pyproject.toml` under `[tool.flake8]`.
+- Run hooks locally: `uv sync` then `uv run pre-commit install` (once), then commits run hooks automatically.
+- Match CI locally: `./scripts/ci-precommit.sh`.
+
+## Code quality
+
+- Prefer type hints on public functions and module boundaries.
+- Keep functions small; extract helpers when logic branches or repeats.
+- Use `pathlib.Path` for filesystem paths; avoid bare `except`.
+- Add or update tests under root `tests/` for behavior you add outside `local-agent/`.
+
+## Dependencies
+
+- Add runtime deps to `[project]` in root `pyproject.toml`; dev-only tools go in `[dependency-groups] dev`.
+- Pin versions in `uv.lock`; use `uv lock` after dependency changes.

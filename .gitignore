@@ -9,3 +9,7 @@ local-agent/*.db
 local-agent/.agent_data/
 *.log
 .DS_Store
+.mypy_cache/
+.ruff_cache/
+.pre-commit-config.yaml.bak
+.ipynb_checkpoints/

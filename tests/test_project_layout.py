@@ -18,6 +18,21 @@ def test_line_search_notebook_present() -> None:
     assert "backtracking_armijo" in text
 
 
+def test_line_search_notebook_includes_optimization_math() -> None:
+    """Notebook explains line search with LaTeX (Armijo, restriction, Rosenbrock)."""
+    nb_path = REPO_ROOT / "notebooks" / "line_search_demo.ipynb"
+    nb = json.loads(nb_path.read_text(encoding="utf-8"))
+    markdown = "".join(
+        "".join(cell["source"])
+        for cell in nb["cells"]
+        if cell["cell_type"] == "markdown"
+    )
+    assert r"\phi(\alpha)" in markdown
+    assert "c_1" in markdown
+    assert r"\nabla f" in markdown
+    assert "(1 - x)^2 + 100" in markdown
+
+
 def test_line_search_notebook_retains_viewable_outputs() -> None:
     """Notebook is checked in with outputs for GitHub/Jupyter viewers."""
     nb_path = REPO_ROOT / "notebooks" / "line_search_demo.ipynb"

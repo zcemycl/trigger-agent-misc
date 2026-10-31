@@ -62,3 +62,19 @@ def test_app_has_format_and_test_scripts() -> None:
     assert scripts.get("format:check") == "prettier --check ."
     assert scripts.get("test") == "vitest run"
     assert (APP_ROOT / "src" / "App.test.tsx").is_file()
+
+
+def test_app_includes_interactive_line_search_demos() -> None:
+    concepts = (APP_ROOT / "src" / "components" / "LineSearchConcepts.tsx").read_text(
+        encoding="utf-8"
+    )
+    for title in (
+        "Exact line search",
+        "Backtracking line search",
+        "Armijo condition",
+        "Wolfe conditions",
+        "Strong Wolfe conditions",
+        "Goldstein conditions",
+    ):
+        assert title in concepts
+    assert (APP_ROOT / "src" / "lineSearch.ts").is_file()

@@ -37,10 +37,50 @@ class Config:
     review_label: str = "agent:review"
     failed_label: str = "agent:failed"
     agent_extra_args: tuple[str, ...] = field(default_factory=lambda: ("-p", "--force", "--output-format", "text"))
+    # Commit attribution (push auth can still be the human gh account).
+    commit_message_prefix: str = "agent:"
+    git_author_name: str = "local-agent"
+    git_author_email: str = "local-agent[bot]@users.noreply.github.com"
+    git_committer_name: str = ""
+    git_committer_email: str = ""
+    commit_co_authored_by: str = "local-agent <local-agent[bot]@users.noreply.github.com>"
 
     @property
     def repo_slug(self) -> str:
         return f"{self.owner}/{self.repo}"
+
+    def format_commit_message(self, subject: str) -> str:
+        """Build a controller commit message with optional prefix and trailer."""
+        text = subject.strip()
+        prefix = self.commit_message_prefix.strip()
+        if prefix:
+            if not text.lower().startswith(prefix.lower()):
+                text = f"{prefix} {text}".strip()
+        trailer = self.commit_co_authored_by.strip()
+        if trailer:
+            if not trailer.lower().startswith("co-authored-by:"):
+                trailer = f"Co-authored-by: {trailer}"
+            text = f"{text}\n\n{trailer}"
+        return text
+
+    def git_commit_env(self) -> dict[str, str]:
+        """Env overrides so agent commits are attributable even with human push auth."""
+        env: dict[str, str] = {}
+        if self.git_author_name.strip():
+            env["GIT_AUTHOR_NAME"] = self.git_author_name.strip()
+            env["GIT_COMMITTER_NAME"] = (
+                self.git_committer_name.strip() or self.git_author_name.strip()
+            )
+        if self.git_author_email.strip():
+            env["GIT_AUTHOR_EMAIL"] = self.git_author_email.strip()
+            env["GIT_COMMITTER_EMAIL"] = (
+                self.git_committer_email.strip() or self.git_author_email.strip()
+            )
+        if self.git_committer_name.strip():
+            env["GIT_COMMITTER_NAME"] = self.git_committer_name.strip()
+        if self.git_committer_email.strip():
+            env["GIT_COMMITTER_EMAIL"] = self.git_committer_email.strip()
+        return env
 
 
 def _require(name: str) -> str:
@@ -147,4 +187,16 @@ def load_config(env_file: str | Path | None = None) -> Config:
         log_dir=log_dir,
         feedback_batch_seconds=_parse_int("FEEDBACK_BATCH_SECONDS", 15, minimum=0),
         max_agent_retries=_parse_int("MAX_AGENT_RETRIES", 2, minimum=0),
+        commit_message_prefix=os.getenv("COMMIT_MESSAGE_PREFIX", "agent:").strip(),
+        git_author_name=os.getenv("GIT_AUTHOR_NAME", "local-agent").strip(),
+        git_author_email=os.getenv(
+            "GIT_AUTHOR_EMAIL",
+            "local-agent[bot]@users.noreply.github.com",
+        ).strip(),
+        git_committer_name=os.getenv("GIT_COMMITTER_NAME", "").strip(),
+        git_committer_email=os.getenv("GIT_COMMITTER_EMAIL", "").strip(),
+        commit_co_authored_by=os.getenv(
+            "COMMIT_CO_AUTHORED_BY",
+            "local-agent <local-agent[bot]@users.noreply.github.com>",
+        ).strip(),
     )

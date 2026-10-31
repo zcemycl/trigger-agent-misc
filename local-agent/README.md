@@ -61,9 +61,12 @@ Create these labels in the GitHub repository:
 | `AGENT_COMMAND` | Cursor CLI binary (default `agent`) |
 | `AGENT_TIMEOUT` | Agent/test timeout seconds |
 | `TEST_COMMAND` | Controller-run test command (default `pytest -q`) |
-| `TRUSTED_GITHUB_USERS` | Comma-separated logins for future feedback loop |
+| `TRUSTED_GITHUB_USERS` | Comma-separated logins for feedback loop |
 | `DATABASE_PATH` | SQLite file path |
 | `LOG_DIR` | Agent/test/controller logs |
+| `COMMIT_MESSAGE_PREFIX` | Prefix for controller commits (default `agent:`) |
+| `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | Author identity for agent commits (push can still use your `gh` account) |
+| `COMMIT_CO_AUTHORED_BY` | Optional `Name <email>` trailer; empty disables it |
 
 Paths and binaries are validated at startup.
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import shlex
 import subprocess
 from dataclasses import dataclass
@@ -56,16 +57,21 @@ class WorkspaceManager:
         *,
         cwd: Optional[Path] = None,
         check: bool = True,
+        env: Optional[dict[str, str]] = None,
     ) -> subprocess.CompletedProcess[str]:
         cmd = ["git", *args]
         workdir = cwd or self.source_repo
         logger.debug("git %s (cwd=%s)", " ".join(shlex.quote(a) for a in args), workdir)
+        run_env = os.environ.copy()
+        if env:
+            run_env.update(env)
         result = subprocess.run(
             cmd,
             cwd=workdir,
             capture_output=True,
             text=True,
             check=False,
+            env=run_env,
         )
         if check and result.returncode != 0:
             raise WorkspaceError(
@@ -349,7 +355,13 @@ class WorkspaceManager:
             base_ref=base,
         )
 
-    def commit_all(self, worktree: Path, message: str) -> bool:
+    def commit_all(
+        self,
+        worktree: Path,
+        message: str,
+        *,
+        env: Optional[dict[str, str]] = None,
+    ) -> bool:
         """Stage all changes and commit. Returns False if there was nothing to commit."""
         self._git(["add", "-A"], cwd=worktree)
         if not self.has_changes(worktree):
@@ -358,10 +370,13 @@ class WorkspaceManager:
             if not staged.stdout.strip():
                 logger.info("No changes to commit in %s", worktree)
                 return False
+        commit_env = env if env is not None else self.config.git_commit_env()
+        # Prefer a single -m with body; fall back to -F via stdin for multiline.
         result = self._git(
             ["commit", "-m", message],
             cwd=worktree,
             check=False,
+            env=commit_env,
         )
         if result.returncode != 0:
             combined = f"{result.stderr}\n{result.stdout}"

@@ -216,7 +216,9 @@ class TaskManager:
 
             committed = self.workspaces.commit_all(
                 wt.path,
-                f"Implement issue #{issue.number}",
+                self.config.format_commit_message(
+                    f"Implement issue #{issue.number}"
+                ),
             )
             if not committed:
                 # Agent may have made no file changes — still treat as failure to publish.
@@ -505,7 +507,9 @@ class TaskManager:
 
             committed = self.workspaces.commit_all(
                 wt.path,
-                f"Address PR feedback for issue #{issue_number}",
+                self.config.format_commit_message(
+                    f"Address PR feedback for issue #{issue_number}"
+                ),
             )
             if committed:
                 # Rebase again in case base moved during the agent run, then push.

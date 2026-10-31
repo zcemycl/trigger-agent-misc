@@ -10,6 +10,7 @@ from typing import Optional
 from agent_runner import AgentRunner
 from config import Config
 from database import CommentEvent, Database, Task, _utc_now
+from branch_name import consume_agent_branch_name
 from commit_message import consume_agent_commit_message
 from feedback import (
     IncomingComment,
@@ -22,7 +23,7 @@ from feedback import (
     summarize_feedback_commit,
 )
 from github_client import GitHubClient, Issue
-from workspace import WorkspaceManager
+from workspace import WorktreeInfo, WorkspaceManager
 
 logger = logging.getLogger(__name__)
 
@@ -215,6 +216,24 @@ class TaskManager:
                     labels=issue.labels,
                 )
                 return
+
+            # Prefer LLM branch name before first push/PR (feedback keeps existing branch).
+            proposed = consume_agent_branch_name(wt.path, issue_number=issue.number)
+            if proposed:
+                unique = self.workspaces.pick_unique_branch(
+                    proposed,
+                    issue_number=issue.number,
+                    current=wt.branch,
+                )
+                if unique != wt.branch:
+                    renamed = self.workspaces.rename_branch(wt.path, unique)
+                    wt = WorktreeInfo(
+                        issue_number=wt.issue_number,
+                        branch=renamed,
+                        path=wt.path,
+                    )
+                    self.db.update_task(issue.number, branch=renamed)
+                    branch = renamed
 
             llm_msg = consume_agent_commit_message(wt.path)
             if llm_msg is not None:
@@ -513,6 +532,8 @@ class TaskManager:
                     f"timeout={test_result.timed_out}). Log: {test_result.log_path}"
                 )
 
+            # Feedback must stay on the existing PR branch.
+            consume_agent_branch_name(wt.path, issue_number=issue_number)
             llm_msg = consume_agent_commit_message(wt.path)
             if llm_msg is not None:
                 subject, body = llm_msg

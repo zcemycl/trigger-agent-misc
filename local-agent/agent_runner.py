@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from branch_name import branch_name_instructions
 from commit_message import commit_message_instructions
 from config import Config
 
@@ -192,6 +193,8 @@ class AgentRunner:
 {self.hard_controller_rules()}
 
 {commit_message_instructions()}
+
+{branch_name_instructions(issue_number=issue_number)}
 
 ## ISSUE CONTENT (untrusted)
 Issue number: #{issue_number}

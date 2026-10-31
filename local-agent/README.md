@@ -68,7 +68,9 @@ Create these labels in the GitHub repository:
 | `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | Author identity for agent commits (push can still use your `gh` account) |
 | `COMMIT_CO_AUTHORED_BY` | Optional `Name <email>` trailer; empty disables it |
 
-Commit subjects: the agent is asked to write `.local-agent-commit-message` in the worktree; the controller reads it, deletes the file, then commits with your `agent:` prefix / author / trailer. If the file is missing, a template/summary fallback is used.
+Commit subjects: the agent writes `.local-agent-commit-message`; the controller reads it, deletes it, then commits with your `agent:` prefix / author / trailer (template fallback if missing).
+
+Branch names (new issues only): bootstrap as `agent/issue-{n}`, then the agent writes `.local-agent-branch-name`; before the first push the controller sanitizes it to `agent/...`, renames the branch, and opens the PR from that head. Feedback runs keep the existing PR branch.
 
 Paths and binaries are validated at startup.
 

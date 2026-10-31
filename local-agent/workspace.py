@@ -46,10 +46,55 @@ class WorkspaceManager:
         self.workspace_root.mkdir(parents=True, exist_ok=True)
 
     def branch_name(self, issue_number: int) -> str:
+        """Default bootstrap branch before the LLM proposes a descriptive name."""
         return f"agent/issue-{issue_number}"
 
     def worktree_path(self, issue_number: int) -> Path:
         return self.workspace_root / f"issue-{issue_number}"
+
+    def current_branch(self, worktree: Path) -> str:
+        result = self._git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=worktree)
+        return result.stdout.strip()
+
+    def rename_branch(self, worktree: Path, new_branch: str) -> str:
+        """Rename the branch checked out in the worktree. Returns the new name."""
+        current = self.current_branch(worktree)
+        if current == new_branch:
+            return current
+        self._git(["branch", "-m", new_branch], cwd=worktree)
+        logger.info("Renamed branch %s -> %s", current, new_branch)
+        return new_branch
+
+    def pick_unique_branch(
+        self,
+        desired: str,
+        *,
+        issue_number: int,
+        current: str | None = None,
+    ) -> str:
+        """Return desired if free (or already current); otherwise a unique variant."""
+        if current and desired == current:
+            return desired
+        candidates = [desired]
+        suffix = f"-{issue_number}"
+        if not desired.endswith(suffix):
+            trimmed = desired[: max(1, 60 - len(suffix))].rstrip("-/")
+            candidates.append(f"{trimmed}{suffix}")
+        for i in range(2, 30):
+            extra = f"-{i}"
+            trimmed = desired[: max(1, 60 - len(extra))].rstrip("-/")
+            candidates.append(f"{trimmed}{extra}")
+        fallback = self.branch_name(issue_number)
+        if fallback not in candidates:
+            candidates.append(fallback)
+
+        for name in candidates:
+            if current and name == current:
+                return name
+            if self.local_branch_exists(name) or self.remote_branch_exists(name):
+                continue
+            return name
+        return fallback
 
     def _git(
         self,

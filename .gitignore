@@ -14,3 +14,4 @@ local-agent/.agent_data/
 .pre-commit-config.yaml.bak
 .ipynb_checkpoints/
 .local-agent-commit-message
+.local-agent-branch-name

@@ -15,3 +15,5 @@ local-agent/.agent_data/
 .ipynb_checkpoints/
 .local-agent-commit-message
 .local-agent-branch-name
+src/app/node_modules/
+src/app/dist/

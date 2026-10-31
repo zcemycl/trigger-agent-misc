@@ -38,3 +38,4 @@ def test_pages_workflow_deploys_gh_pages_branch() -> None:
     assert "peaceiris/actions-gh-pages" in workflow
     assert "workflow_dispatch:" in workflow
     assert "branches: [main]" not in workflow
+    assert '"**"' in workflow

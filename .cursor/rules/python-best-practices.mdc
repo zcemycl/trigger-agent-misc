@@ -9,6 +9,7 @@ alwaysApply: false
 ## Layout
 
 - Repository-owned application code lives under `src/` (import path `trigger_agent_misc`).
+- Tests live in root `tests/`; evaluation scripts in `evals/`; notebooks in `notebooks/`.
 - Do not change `local-agent/` unless an issue explicitly requires it; that tree is a separate subproject with its own `pyproject.toml` and tests.
 
 ## Style and tools

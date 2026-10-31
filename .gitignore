@@ -12,3 +12,4 @@ local-agent/.agent_data/
 .mypy_cache/
 .ruff_cache/
 .pre-commit-config.yaml.bak
+.ipynb_checkpoints/

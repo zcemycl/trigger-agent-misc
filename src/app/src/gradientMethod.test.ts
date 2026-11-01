@@ -16,6 +16,8 @@ describe("gradientDescent", () => {
       tol: 1e-8,
     });
     expect(Math.abs(result.x[0] - FINITE_SUM_OPTIMUM)).toBeLessThan(1e-3);
+    expect(result.steps.length).toBe(result.iterations);
+    expect(result.steps[0]?.detail).toContain("∇f");
   });
 });
 

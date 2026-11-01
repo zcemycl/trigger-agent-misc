@@ -108,6 +108,16 @@ def test_app_includes_interactive_gradient_method_demos() -> None:
     assert "GRADIENT_METHOD_PAGES" in concepts
 
 
+def test_gradient_method_pages_include_step_by_step_tables() -> None:
+    concepts = (
+        APP_ROOT / "src" / "components" / "GradientMethodConcepts.tsx"
+    ).read_text(encoding="utf-8")
+    assert "OptimizationStepTable" in concepts
+    assert "Step-by-step example" in concepts
+    assert concepts.count("StepByStepWalkthrough") >= 6
+    assert (APP_ROOT / "src" / "components" / "OptimizationStepTable.tsx").is_file()
+
+
 def test_app_uses_chapter_nav_for_line_search_and_gradient_methods() -> None:
     app_tsx = (APP_ROOT / "src" / "App.tsx").read_text(encoding="utf-8")
     assert "Gradient methods" in app_tsx

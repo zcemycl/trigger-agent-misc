@@ -14,7 +14,9 @@ import {
   nesterovAcceleratedGradient,
   stochasticGradientDescent,
 } from "../gradientMethod";
+import type { GradientIterationStep } from "../gradientMethod";
 import { MathBlock } from "./MathBlock";
+import { OptimizationStepTable } from "./OptimizationStepTable";
 import { TrajectoryChart } from "./TrajectoryChart";
 
 function Section({
@@ -73,6 +75,30 @@ function ResultStats({
   );
 }
 
+function StepByStepWalkthrough({
+  steps,
+  methodName,
+}: {
+  steps: GradientIterationStep[];
+  methodName: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-medium text-slate-300">
+        Step-by-step example
+      </h3>
+      <p className="text-xs leading-relaxed text-slate-500">
+        Each row is one iteration of the optimizer starting from x₀ = 3, showing
+        how {methodName} updates x until convergence.
+      </p>
+      <OptimizationStepTable
+        steps={steps}
+        caption={`${methodName} step-by-step iterations`}
+      />
+    </div>
+  );
+}
+
 function LearningRateSlider({
   value,
   onChange,
@@ -126,6 +152,10 @@ function GradientDescentDemo() {
     >
       <LearningRateSlider value={lr} onChange={setLr} />
       <TrajectoryChart objective={objective1d} history={historyX} />
+      <StepByStepWalkthrough
+        steps={result.steps}
+        methodName="gradient descent"
+      />
       <ResultStats
         x={result.x[0]}
         value={result.value}
@@ -160,6 +190,7 @@ function SgdDemo() {
     >
       <LearningRateSlider value={lr} onChange={setLr} />
       <TrajectoryChart objective={objective1d} history={historyX} />
+      <StepByStepWalkthrough steps={result.steps} methodName="SGD" />
       <ResultStats
         x={result.x[0]}
         value={result.value}
@@ -207,6 +238,7 @@ function MinibatchDemo() {
         />
       </label>
       <TrajectoryChart objective={objective1d} history={historyX} />
+      <StepByStepWalkthrough steps={result.steps} methodName="mini-batch SGD" />
       <ResultStats
         x={result.x[0]}
         value={result.value}
@@ -256,6 +288,7 @@ function MomentumDemo() {
         />
       </label>
       <TrajectoryChart objective={objective1d} history={historyX} />
+      <StepByStepWalkthrough steps={result.steps} methodName="momentum" />
       <ResultStats
         x={result.x[0]}
         value={result.value}
@@ -305,6 +338,10 @@ function NesterovDemo() {
         />
       </label>
       <TrajectoryChart objective={objective1d} history={historyX} />
+      <StepByStepWalkthrough
+        steps={result.steps}
+        methodName="Nesterov accelerated gradient"
+      />
       <ResultStats
         x={result.x[0]}
         value={result.value}
@@ -351,6 +388,7 @@ function HeavyBallDemo() {
         />
       </label>
       <TrajectoryChart objective={objective1d} history={historyX} />
+      <StepByStepWalkthrough steps={result.steps} methodName="heavy-ball" />
       <ResultStats
         x={result.x[0]}
         value={result.value}

@@ -9,6 +9,7 @@ import {
   newtonsMethod,
   quasiNewtonBfgs,
   type OptimizeResult,
+  type Vec,
 } from "../secondOrder";
 import {
   leastSquaresValue,
@@ -303,7 +304,7 @@ function LeastSquaresSliders({
   return <QuadraticStartSliders x0={x0} y0={y0} onChange={onChange} />;
 }
 
-function rosenbrockObjective(x: [number, number]): number {
+function rosenbrockObjective(x: Vec): number {
   return leastSquaresValue(rosenbrockResidual, x);
 }
 

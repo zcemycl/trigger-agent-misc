@@ -1,7 +1,10 @@
+import { formatVector, type Vector } from "../gradientMethod";
+
 export interface OptimizationStepRow {
   iteration: number;
-  x: number;
-  xNext: number;
+  x: Vector;
+  delta: Vector;
+  xNext: Vector;
   objective: number;
   detail: string;
 }
@@ -26,7 +29,7 @@ export function OptimizationStepTable({
 
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-800">
-      <table className="w-full min-w-[32rem] text-left text-sm">
+      <table className="w-full min-w-[40rem] text-left text-sm">
         <caption className="sr-only">{caption}</caption>
         <thead className="bg-slate-800/60 text-xs uppercase tracking-wide text-slate-400">
           <tr>
@@ -34,16 +37,19 @@ export function OptimizationStepTable({
               Step k
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              x<sub>k</sub>
+              x<sub>k</sub> (vector)
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
               f(x<sub>k</sub>)
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              Update at k
+              Vector update at k
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              x<sub>k+1</sub>
+              Δx<sub>k</sub> (vector)
+            </th>
+            <th scope="col" className="px-3 py-2 font-medium">
+              x<sub>k+1</sub> (vector)
             </th>
           </tr>
         </thead>
@@ -53,15 +59,18 @@ export function OptimizationStepTable({
               <td className="px-3 py-2 font-mono text-slate-400">
                 {row.iteration}
               </td>
-              <td className="px-3 py-2 font-mono">{row.x.toFixed(4)}</td>
+              <td className="px-3 py-2 font-mono">{formatVector(row.x)}</td>
               <td className="px-3 py-2 font-mono">
                 {row.objective.toExponential(3)}
               </td>
               <td className="px-3 py-2 text-xs leading-snug text-slate-400">
                 {row.detail}
               </td>
+              <td className="px-3 py-2 font-mono text-amber-200/90">
+                {formatVector(row.delta)}
+              </td>
               <td className="px-3 py-2 font-mono text-emerald-300/90">
-                {row.xNext.toFixed(4)}
+                {formatVector(row.xNext)}
               </td>
             </tr>
           ))}

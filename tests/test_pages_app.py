@@ -115,6 +115,11 @@ def test_gradient_method_pages_include_step_by_step_tables() -> None:
     assert "OptimizationStepTable" in concepts
     assert concepts.count("OptimizationStepTable") >= 6
     assert (APP_ROOT / "src" / "components" / "OptimizationStepTable.tsx").is_file()
+    table = (APP_ROOT / "src" / "components" / "OptimizationStepTable.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "vector" in table.lower()
+    assert "formatVector" in table
 
 
 def test_agents_md_documents_pages_app_ui_guidance() -> None:

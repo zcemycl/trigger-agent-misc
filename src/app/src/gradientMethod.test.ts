@@ -6,7 +6,12 @@ import {
   finiteSumObjective,
   SAMPLE_CENTERS,
 } from "./finiteSumQuadratic";
-import { gradientDescent, minibatchSgd } from "./gradientMethod";
+import {
+  formatVector,
+  gradientDescent,
+  minibatchSgd,
+  momentum,
+} from "./gradientMethod";
 
 describe("gradientDescent", () => {
   it("finds the mean of sample centers", () => {
@@ -17,7 +22,34 @@ describe("gradientDescent", () => {
     });
     expect(Math.abs(result.x[0] - FINITE_SUM_OPTIMUM)).toBeLessThan(1e-3);
     expect(result.steps.length).toBe(result.iterations);
-    expect(result.steps[0]?.detail).toContain("∇f");
+    const step0 = result.steps[0];
+    expect(step0?.detail).toContain("∇f(x_k)");
+    expect(step0?.detail).toContain("Δx_k");
+    expect(step0?.detail).toContain("x_{k+1}");
+    expect(formatVector(step0!.x)).toMatch(/^\[/);
+    expect(formatVector(step0!.xNext)).toMatch(/^\[/);
+    expect(formatVector(step0!.delta)).toMatch(/^\[/);
+  });
+});
+
+describe("momentum", () => {
+  it("records velocity and position vectors in step details", () => {
+    const result = momentum([3], finiteSumObjective, finiteSumGrad, {
+      learningRate: 0.05,
+      beta: 0.9,
+      maxIter: 5,
+      tol: 1e-8,
+    });
+    const step0 = result.steps[0];
+    expect(step0?.detail).toContain("v_{k+1}");
+    expect(step0?.detail).toContain("∇f(x_k) = [");
+  });
+});
+
+describe("formatVector", () => {
+  it("uses bracket notation", () => {
+    expect(formatVector([1.234567])).toBe("[1.2346]");
+    expect(formatVector([1, 2])).toBe("[1.0000, 2.0000]");
   });
 });
 

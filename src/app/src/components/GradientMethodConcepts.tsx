@@ -7,12 +7,14 @@ import {
   SAMPLE_CENTERS,
 } from "../finiteSumQuadratic";
 import {
+  formatVector,
   gradientDescent,
   heavyBallMethod,
   minibatchSgd,
   momentum,
   nesterovAcceleratedGradient,
   stochasticGradientDescent,
+  type Vector,
 } from "../gradientMethod";
 import { MathBlock } from "./MathBlock";
 import { OptimizationStepTable } from "./OptimizationStepTable";
@@ -43,14 +45,14 @@ function ResultStats({
   value,
   iterations,
 }: {
-  x: number;
+  x: Vector;
   value: number;
   iterations: number;
 }) {
   return (
     <p className="font-mono text-sm text-emerald-300">
-      x = {x.toFixed(4)} · f(x) = {value.toExponential(3)} · {iterations} · x* ≈{" "}
-      {FINITE_SUM_OPTIMUM.toFixed(4)}
+      x = {formatVector(x)} · f(x) = {value.toExponential(3)} · {iterations} ·
+      x* ≈ {formatVector([FINITE_SUM_OPTIMUM])}
     </p>
   );
 }
@@ -112,7 +114,7 @@ function GradientDescentDemo() {
         caption="Gradient descent step-by-step iterations"
       />
       <ResultStats
-        x={result.x[0]}
+        x={result.x}
         value={result.value}
         iterations={result.iterations}
       />
@@ -149,7 +151,7 @@ function SgdDemo() {
         caption="SGD step-by-step iterations"
       />
       <ResultStats
-        x={result.x[0]}
+        x={result.x}
         value={result.value}
         iterations={result.iterations}
       />
@@ -199,7 +201,7 @@ function MinibatchDemo() {
         caption="Mini-batch SGD step-by-step iterations"
       />
       <ResultStats
-        x={result.x[0]}
+        x={result.x}
         value={result.value}
         iterations={result.iterations}
       />
@@ -251,7 +253,7 @@ function MomentumDemo() {
         caption="Momentum step-by-step iterations"
       />
       <ResultStats
-        x={result.x[0]}
+        x={result.x}
         value={result.value}
         iterations={result.iterations}
       />
@@ -281,6 +283,7 @@ function NesterovDemo() {
         <>
           <MathBlock tex="\mathbf{y}_k = \mathbf{x}_k - \beta \mathbf{v}_k" />
           <MathBlock tex="\mathbf{v}_{k+1} = \beta \mathbf{v}_k + \nabla f(\mathbf{y}_k)" />
+          <MathBlock tex="\mathbf{x}_{k+1} = \mathbf{x}_k - \eta \mathbf{v}_{k+1}" />
         </>
       }
     >
@@ -303,7 +306,7 @@ function NesterovDemo() {
         caption="Nesterov accelerated gradient step-by-step iterations"
       />
       <ResultStats
-        x={result.x[0]}
+        x={result.x}
         value={result.value}
         iterations={result.iterations}
       />
@@ -352,7 +355,7 @@ function HeavyBallDemo() {
         caption="Heavy-ball step-by-step iterations"
       />
       <ResultStats
-        x={result.x[0]}
+        x={result.x}
         value={result.value}
         iterations={result.iterations}
       />
@@ -381,9 +384,9 @@ function ConceptIntro() {
   return (
     <div className="mb-6">
       <MathBlock
-        tex={`f(x) = \\tfrac{1}{m}\\sum_i \\tfrac{1}{2}(x-c_i)^2, \\quad c_i \\in \\{${SAMPLE_CENTERS.join(
+        tex={`f(\\mathbf{x}) = \\tfrac{1}{m}\\sum_i \\tfrac{1}{2}(x-c_i)^2, \\quad c_i \\in \\{${SAMPLE_CENTERS.join(
           ", ",
-        )}\\}, \\quad x_0 = 3`}
+        )}\\}, \\quad \\mathbf{x}_0 = [3]`}
       />
     </div>
   );

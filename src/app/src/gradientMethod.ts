@@ -7,10 +7,20 @@ export type SampleGradFn = (index: number, x: Vector) => Vector;
 
 export interface GradientIterationStep {
   iteration: number;
-  x: number;
-  xNext: number;
+  /** Parameter vector x_k before the update. */
+  x: Vector;
+  /** Update increment Δx_k added to x_k. */
+  delta: Vector;
+  /** Parameter vector x_{k+1} = x_k + Δx_k. */
+  xNext: Vector;
   objective: number;
   detail: string;
+}
+
+/** Bracket notation for a parameter or gradient vector (demo is 1D but API is general). */
+export function formatVector(v: Vector, digits = 4): string {
+  const inner = v.map((c) => c.toFixed(digits)).join(", ");
+  return `[${inner}]`;
 }
 
 export interface GradientMethodResult {
@@ -104,8 +114,9 @@ function runFirstOrder(
     if (recordSteps) {
       steps.push({
         iteration: k,
-        x: x[0],
-        xNext: xNext[0],
+        x: x.slice(),
+        delta: delta.slice(),
+        xNext: xNext.slice(),
         objective: objective(x),
         detail,
       });
@@ -140,11 +151,12 @@ export function gradientDescent(
     objective,
     (x) => {
       const g = validateVector(grad(x));
+      const delta = scale(-learningRate, g);
       return {
-        delta: scale(-learningRate, g),
-        detail: `∇f(x_k) = ${g[0].toFixed(
-          4,
-        )}; update x ← x − ${learningRate}·∇f`,
+        delta,
+        detail: `∇f(x_k) = ${formatVector(
+          g,
+        )}; Δx_k = −η·∇f(x_k) = ${formatVector(delta)}; x_{k+1} = x_k + Δx_k`,
       };
     },
     options,
@@ -178,11 +190,12 @@ export function stochasticGradientDescent(
     (x) => {
       const idx = Math.floor(rand() * numSamples);
       const g = validateVector(gradAtIndex(idx, x));
+      const delta = scale(-learningRate, g);
       return {
-        delta: scale(-learningRate, g),
-        detail: `pick i=${idx}, ∇f_i = ${g[0].toFixed(
-          4,
-        )}; x ← x − ${learningRate}·∇f_i`,
+        delta,
+        detail: `i_k = ${idx}, ∇f_{i_k}(x_k) = ${formatVector(
+          g,
+        )}; Δx_k = −η·∇f_{i_k} = ${formatVector(delta)}; x_{k+1} = x_k + Δx_k`,
       };
     },
     options,
@@ -220,9 +233,12 @@ export function minibatchSgd(
       const sorted = [...indices].sort((a, b) => a - b);
       const grads = sorted.map((i) => validateVector(gradAtIndex(i, x)));
       const avg = mean(grads);
+      const delta = scale(-learningRate, avg);
       return {
-        delta: scale(-learningRate, avg),
-        detail: `batch B={${sorted.join(",")}}, avg ∇ = ${avg[0].toFixed(4)}`,
+        delta,
+        detail: `B = {${sorted.join(",")}}, ḡ_B = ${formatVector(
+          avg,
+        )}; Δx_k = −η·ḡ_B = ${formatVector(delta)}; x_{k+1} = x_k + Δx_k`,
       };
     },
     options,
@@ -249,11 +265,14 @@ export function momentum(
     (x) => {
       const g = validateVector(grad(x));
       velocity = add(scale(beta, velocity), g);
+      const delta = scale(-learningRate, velocity);
       return {
-        delta: scale(-learningRate, velocity),
-        detail: `∇f = ${g[0].toFixed(
-          4,
-        )}, v ← ${beta}v + ∇f → ${velocity[0].toFixed(4)}`,
+        delta,
+        detail: `∇f(x_k) = ${formatVector(
+          g,
+        )}; v_{k+1} = β·v_k + ∇f(x_k) = ${formatVector(
+          velocity,
+        )}; Δx_k = −η·v_{k+1} = ${formatVector(delta)}; x_{k+1} = x_k + Δx_k`,
       };
     },
     options,
@@ -281,11 +300,14 @@ export function nesterovAcceleratedGradient(
       const lookAhead = sub(x, scale(beta, velocity));
       const g = validateVector(grad(lookAhead));
       velocity = add(scale(beta, velocity), g);
+      const delta = scale(-learningRate, velocity);
       return {
-        delta: scale(-learningRate, velocity),
-        detail: `y = ${lookAhead[0].toFixed(4)}, ∇f(y) = ${g[0].toFixed(
-          4,
-        )}, v = ${velocity[0].toFixed(4)}`,
+        delta,
+        detail: `y_k = x_k − β·v_k = ${formatVector(
+          lookAhead,
+        )}; ∇f(y_k) = ${formatVector(g)}; v_{k+1} = ${formatVector(
+          velocity,
+        )}; Δx_k = −η·v_{k+1} = ${formatVector(delta)}; x_{k+1} = x_k + Δx_k`,
       };
     },
     options,
@@ -317,8 +339,14 @@ export function heavyBallMethod(
           : add(scale(-learningRate, g), scale(beta, sub(x, xPrev)));
       const detail =
         k === 0
-          ? `∇f = ${g[0].toFixed(4)}; first step (no momentum term)`
-          : `∇f = ${g[0].toFixed(4)}; + ${beta}(x_k − x_{k−1})`;
+          ? `∇f(x_k) = ${formatVector(g)}; Δx_k = −η·∇f(x_k) = ${formatVector(
+              delta,
+            )} (no x_{k−1} term yet); x_{k+1} = x_k + Δx_k`
+          : `∇f(x_k) = ${formatVector(
+              g,
+            )}; Δx_k = −η·∇f(x_k) + β·(x_k − x_{k−1}) = ${formatVector(
+              delta,
+            )}; x_{k+1} = x_k + Δx_k`;
       xPrev = x.slice();
       return { delta, detail };
     },

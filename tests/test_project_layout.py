@@ -33,6 +33,25 @@ def test_line_search_notebook_includes_optimization_math() -> None:
     assert "(1 - x)^2 + 100" in markdown
 
 
+def test_gradient_method_notebook_present() -> None:
+    nb = REPO_ROOT / "notebooks" / "gradient_method_demo.ipynb"
+    assert nb.is_file()
+    text = nb.read_text(encoding="utf-8")
+    assert "gradient_descent" in text
+
+
+def test_gradient_method_notebook_includes_optimization_math() -> None:
+    nb_path = REPO_ROOT / "notebooks" / "gradient_method_demo.ipynb"
+    nb = json.loads(nb_path.read_text(encoding="utf-8"))
+    markdown = "".join(
+        "".join(cell["source"])
+        for cell in nb["cells"]
+        if cell["cell_type"] == "markdown"
+    )
+    assert r"\nabla f" in markdown
+    assert "SGD" in markdown or "stochastic" in markdown.lower()
+
+
 def test_line_search_notebook_retains_viewable_outputs() -> None:
     """Notebook is checked in with outputs for GitHub/Jupyter viewers."""
     nb_path = REPO_ROOT / "notebooks" / "line_search_demo.ipynb"

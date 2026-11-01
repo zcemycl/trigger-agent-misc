@@ -1,5 +1,6 @@
 """Smoke tests for evaluation harnesses under ``evals/``."""
 
+from evals.gradient_method_eval import run_all as run_gradient_evals
 from evals.line_search_eval import eval_quadratic_along_gradient, run_all
 
 
@@ -28,3 +29,18 @@ def test_run_all_includes_benchmarks() -> None:
     assert results["wolfe"]["wolfe_curvature_holds"] is True
     assert results["strong_wolfe"]["strong_wolfe_holds"] is True
     assert results["goldstein"]["goldstein_holds"] is True
+
+
+def test_gradient_method_eval_run_all() -> None:
+    results = run_gradient_evals()
+    expected = {
+        "gradient_descent",
+        "stochastic_gradient_descent",
+        "minibatch_sgd",
+        "momentum",
+        "nesterov",
+        "heavy_ball",
+    }
+    assert set(results) == expected
+    assert results["gradient_descent"]["near_optimum"] is True
+    assert results["momentum"]["near_optimum"] is True

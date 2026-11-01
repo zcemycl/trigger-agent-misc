@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import App from "./App";
 import { GRADIENT_METHOD_PAGES } from "./components/GradientMethodConcepts";
 import { LINE_SEARCH_PAGES } from "./components/LineSearchConcepts";
+import { SECOND_ORDER_PAGES } from "./components/SecondOrderConcepts";
 
 describe("App", () => {
   it("renders gradient method sidebar by default", () => {
@@ -53,5 +54,40 @@ describe("App", () => {
     expect(
       screen.getByRole("heading", { name: "Exact line search" }),
     ).toBeInTheDocument();
+  });
+
+  it("shows second-order chapter when selected", () => {
+    render(<App />);
+    fireEvent.click(
+      within(
+        screen.getByRole("navigation", { name: "Optimization chapters" }),
+      ).getByRole("button", { name: "Second-order" }),
+    );
+    expect(
+      screen.getByRole("navigation", {
+        name: "Second-order optimization concepts",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Newton's method" }),
+    ).toBeInTheDocument();
+
+    for (const { title } of SECOND_ORDER_PAGES) {
+      expect(screen.getByRole("button", { name: title })).toBeInTheDocument();
+    }
+  });
+
+  it("switches second-order concept page from sidebar", () => {
+    render(<App />);
+    fireEvent.click(
+      within(
+        screen.getByRole("navigation", { name: "Optimization chapters" }),
+      ).getByRole("button", { name: "Second-order" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "BFGS" }));
+    expect(screen.getByRole("heading", { name: "BFGS" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Newton's method" }),
+    ).not.toBeInTheDocument();
   });
 });

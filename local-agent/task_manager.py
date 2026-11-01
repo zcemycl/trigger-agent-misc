@@ -93,24 +93,24 @@ class TaskManager:
                 )
                 break
 
-            if self.db.task_exists(issue.number):
-                existing = self.db.get_task(issue.number)
-                # If already tracked, do not start a duplicate initial run.
+            existing = self.db.get_task(issue.number) if self.db.task_exists(issue.number) else None
+            if existing is not None and existing.status != "failed":
+                # Active/completed tasks: do not start a duplicate initial run.
                 logger.info(
                     "Issue #%s already tracked (status=%s); skipping duplicate ready pickup",
                     issue.number,
-                    existing.status if existing else "?",
+                    existing.status,
                 )
-                # Still clear the ready label so we do not loop forever.
                 try:
                     self.github.replace_agent_label(
                         issue.number,
                         remove=self.config.ready_label,
                         add=self.config.running_label
-                        if existing and existing.status in {"queued", "running"}
+                        if existing.status in {"queued", "running"}
                         else (
                             self.config.review_label
-                            if existing and existing.status in {"pr_open", "review_pending", "updating"}
+                            if existing.status
+                            in {"pr_open", "review_pending", "updating"}
                             else self.config.failed_label
                         ),
                         current_labels=issue.labels,
@@ -131,7 +131,10 @@ class TaskManager:
                 continue
 
             try:
-                future = self._executor.submit(self._handle_new_issue, issue)
+                if existing is not None and existing.status == "failed":
+                    future = self._executor.submit(self._handle_failed_retry, issue)
+                else:
+                    future = self._executor.submit(self._handle_new_issue, issue)
                 with self._inflight_lock:
                     self._inflight[issue.number] = future
                 future.add_done_callback(
@@ -169,7 +172,7 @@ class TaskManager:
             return
 
         try:
-            task = self.db.create_task(
+            self.db.create_task(
                 issue_number=issue.number,
                 branch=branch,
                 workspace=str(workspace_path),
@@ -183,41 +186,148 @@ class TaskManager:
         try:
             self.db.update_task(issue.number, status="running", last_error=None)
             wt = self.workspaces.ensure_worktree(issue.number)
-            prompt = self.agent_runner.build_implementation_prompt(
-                issue_number=issue.number,
-                title=issue.title,
-                body=issue.body,
+            self._run_implementation_pipeline(issue, wt, allow_empty_commit_failure=True)
+        except Exception as exc:
+            logger.exception("Pipeline failed for issue #%s", issue.number)
+            self._fail_task(issue.number, str(exc), labels=issue.labels)
+
+    def _handle_failed_retry(self, issue: Issue) -> None:
+        """Re-run a failed task when `agent:ready` is applied again."""
+        task = self.db.get_task(issue.number)
+        if task is None:
+            self._handle_new_issue(issue)
+            return
+
+        logger.info(
+            "Retrying failed issue #%s (previous error: %s)",
+            issue.number,
+            task.last_error,
+        )
+        try:
+            self.github.replace_agent_label(
+                issue.number,
+                remove=self.config.ready_label,
+                add=self.config.running_label,
+                current_labels=issue.labels,
             )
-            agent_result = self.agent_runner.run_agent(
-                worktree=wt.path,
-                prompt=prompt,
-                issue_number=issue.number,
+            self.github.remove_issue_label(issue.number, self.config.failed_label)
+        except Exception:
+            logger.exception("Failed to set running label on issue #%s", issue.number)
+            return
+
+        try:
+            self.db.update_task(issue.number, status="running", last_error=None)
+            wt = self.workspaces.ensure_worktree(
+                issue.number,
+                branch=task.branch,
             )
-            if agent_result.timed_out or agent_result.exit_code != 0:
-                self._fail_task(
-                    issue.number,
-                    f"Agent failed (exit={agent_result.exit_code}, "
-                    f"timeout={agent_result.timed_out}). "
-                    f"Log: {agent_result.log_path}",
-                    labels=issue.labels,
-                )
+            self.db.update_task(
+                issue.number,
+                branch=wt.branch,
+                workspace=str(wt.path),
+            )
+
+            # Prefer finishing existing work (e.g. commit failed only on hooks).
+            if self._try_publish_existing_work(issue, wt):
                 return
 
-            test_result = self.agent_runner.run_tests(
-                worktree=wt.path,
-                issue_number=issue.number,
+            logger.info(
+                "No publishable work for issue #%s; re-running agent",
+                issue.number,
             )
-            if test_result.timed_out or test_result.exit_code != 0:
-                self._fail_task(
-                    issue.number,
-                    f"Tests failed (exit={test_result.exit_code}, "
-                    f"timeout={test_result.timed_out}). "
-                    f"Log: {test_result.log_path}",
-                    labels=issue.labels,
-                )
-                return
+            self._run_implementation_pipeline(
+                issue,
+                wt,
+                allow_empty_commit_failure=True,
+            )
+        except Exception as exc:
+            logger.exception("Retry pipeline failed for issue #%s", issue.number)
+            self._fail_task(issue.number, str(exc), labels=issue.labels)
 
-            # Prefer LLM branch name before first push/PR (feedback keeps existing branch).
+    def _try_publish_existing_work(self, issue: Issue, wt: WorktreeInfo) -> bool:
+        """
+        Tests + commit/push/PR using current worktree state.
+
+        Returns True when the issue reaches review_pending without a new agent run.
+        """
+        consume_agent_branch_name(wt.path, issue_number=issue.number)
+        llm_msg = consume_agent_commit_message(wt.path)
+
+        test_result = self.agent_runner.run_tests(
+            worktree=wt.path,
+            issue_number=issue.number,
+        )
+        if test_result.timed_out or test_result.exit_code != 0:
+            raise RuntimeError(
+                f"Tests failed on retry (exit={test_result.exit_code}, "
+                f"timeout={test_result.timed_out}). Log: {test_result.log_path}"
+            )
+
+        if llm_msg is not None:
+            subject, body = llm_msg
+        else:
+            subject = f"#{issue.number} retry publish: {issue.title}".strip()
+            if len(subject) > 64:
+                subject = subject[:63].rstrip() + "…"
+            body = f"Retry publish for issue #{issue.number}.\n"
+
+        committed = self.workspaces.commit_all(
+            wt.path,
+            self.config.format_commit_message(subject, body=body),
+        )
+        unpublished = self.workspaces.branch_has_unpublished_commits(
+            wt.path, wt.branch
+        )
+        if not committed and not unpublished:
+            return False
+
+        self._push_and_open_or_update_pr(issue, wt)
+        return True
+
+    def _run_implementation_pipeline(
+        self,
+        issue: Issue,
+        wt: WorktreeInfo,
+        *,
+        allow_empty_commit_failure: bool,
+    ) -> None:
+        prompt = self.agent_runner.build_implementation_prompt(
+            issue_number=issue.number,
+            title=issue.title,
+            body=issue.body,
+        )
+        agent_result = self.agent_runner.run_agent(
+            worktree=wt.path,
+            prompt=prompt,
+            issue_number=issue.number,
+        )
+        if agent_result.timed_out or agent_result.exit_code != 0:
+            self._fail_task(
+                issue.number,
+                f"Agent failed (exit={agent_result.exit_code}, "
+                f"timeout={agent_result.timed_out}). "
+                f"Log: {agent_result.log_path}",
+                labels=issue.labels,
+            )
+            return
+
+        test_result = self.agent_runner.run_tests(
+            worktree=wt.path,
+            issue_number=issue.number,
+        )
+        if test_result.timed_out or test_result.exit_code != 0:
+            self._fail_task(
+                issue.number,
+                f"Tests failed (exit={test_result.exit_code}, "
+                f"timeout={test_result.timed_out}). "
+                f"Log: {test_result.log_path}",
+                labels=issue.labels,
+            )
+            return
+
+        # Prefer LLM branch name before first push/PR (feedback keeps existing branch).
+        task = self.db.get_task(issue.number)
+        if task is None or not task.pr_number:
             proposed = consume_agent_branch_name(wt.path, issue_number=issue.number)
             if proposed:
                 unique = self.workspaces.pick_unique_branch(
@@ -233,52 +343,50 @@ class TaskManager:
                         path=wt.path,
                     )
                     self.db.update_task(issue.number, branch=renamed)
-                    branch = renamed
 
-            llm_msg = consume_agent_commit_message(wt.path)
-            if llm_msg is not None:
-                subject, body = llm_msg
-            else:
-                subject = f"#{issue.number} implement: {issue.title}".strip()
-                if len(subject) > 64:
-                    subject = subject[:63].rstrip() + "…"
-                body = f"Automated implementation for issue #{issue.number}.\n"
-            committed = self.workspaces.commit_all(
-                wt.path,
-                self.config.format_commit_message(subject, body=body),
-            )
-            if not committed:
-                # Agent may have made no file changes — still treat as failure to publish.
+        llm_msg = consume_agent_commit_message(wt.path)
+        if llm_msg is not None:
+            subject, body = llm_msg
+        else:
+            subject = f"#{issue.number} implement: {issue.title}".strip()
+            if len(subject) > 64:
+                subject = subject[:63].rstrip() + "…"
+            body = f"Automated implementation for issue #{issue.number}.\n"
+        committed = self.workspaces.commit_all(
+            wt.path,
+            self.config.format_commit_message(subject, body=body),
+        )
+        unpublished = self.workspaces.branch_has_unpublished_commits(
+            wt.path, wt.branch
+        )
+        if not committed and not unpublished:
+            if allow_empty_commit_failure:
                 self._fail_task(
                     issue.number,
                     "No changes to commit after agent run",
                     labels=issue.labels,
                 )
-                return
+            return
 
-            # Parent may have moved while the agent ran.
-            rebased = self._rebase_branch(
-                wt.path,
-                wt.branch,
-                push=False,
-                issue_number=issue.number,
-            )
-            self.workspaces.push_branch(
-                wt.path,
-                wt.branch,
-                force_with_lease=rebased,
-            )
-            pr = self.github.create_pull_request(
-                head=wt.branch,
-                base=self.config.base_branch,
-                title=issue.title or f"Implement issue #{issue.number}",
-                body=f"Automated implementation. Closes #{issue.number}",
-            )
+        self._push_and_open_or_update_pr(issue, wt)
+
+    def _push_and_open_or_update_pr(self, issue: Issue, wt: WorktreeInfo) -> None:
+        rebased = self._rebase_branch(
+            wt.path,
+            wt.branch,
+            push=False,
+            issue_number=issue.number,
+        )
+        self.workspaces.push_branch(
+            wt.path,
+            wt.branch,
+            force_with_lease=rebased,
+        )
+        task = self.db.get_task(issue.number)
+        if task is not None and task.pr_number:
             self.db.update_task(
                 issue.number,
-                status="pr_open",
-                pr_number=pr.number,
-                pr_url=pr.url,
+                status="review_pending",
                 last_error=None,
             )
             self.github.replace_agent_label(
@@ -287,17 +395,39 @@ class TaskManager:
                 add=self.config.review_label,
                 current_labels=self.github.get_issue(issue.number).labels,
             )
-            # Move to review_pending once PR is up.
-            self.db.update_task(issue.number, status="review_pending")
             logger.info(
-                "Opened PR #%s for issue #%s: %s",
-                pr.number,
+                "Updated existing PR #%s for issue #%s",
+                task.pr_number,
                 issue.number,
-                pr.url,
             )
-        except Exception as exc:
-            logger.exception("Pipeline failed for issue #%s", issue.number)
-            self._fail_task(issue.number, str(exc), labels=issue.labels)
+            return
+
+        pr = self.github.create_pull_request(
+            head=wt.branch,
+            base=self.config.base_branch,
+            title=issue.title or f"Implement issue #{issue.number}",
+            body=f"Automated implementation. Closes #{issue.number}",
+        )
+        self.db.update_task(
+            issue.number,
+            status="pr_open",
+            pr_number=pr.number,
+            pr_url=pr.url,
+            last_error=None,
+        )
+        self.github.replace_agent_label(
+            issue.number,
+            remove=self.config.running_label,
+            add=self.config.review_label,
+            current_labels=self.github.get_issue(issue.number).labels,
+        )
+        self.db.update_task(issue.number, status="review_pending")
+        logger.info(
+            "Opened PR #%s for issue #%s: %s",
+            pr.number,
+            issue.number,
+            pr.url,
+        )
 
     def _fail_task(
         self,

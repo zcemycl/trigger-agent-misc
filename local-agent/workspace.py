@@ -184,36 +184,56 @@ class WorkspaceManager:
                 return Path(entry["path"])
         return None
 
-    def ensure_worktree(self, issue_number: int) -> WorktreeInfo:
+    def ensure_worktree(
+        self,
+        issue_number: int,
+        *,
+        branch: str | None = None,
+    ) -> WorktreeInfo:
         """
         Fetch origin, create branch from base if needed, and create a worktree.
 
-        Refuses to overwrite an existing worktree directory that is not already
-        registered for this branch.
+        If `branch` is provided (e.g. a previously renamed LLM branch), prefer it.
+        An existing worktree directory is reused even if it was renamed away from
+        the bootstrap `agent/issue-N` name.
         """
-        branch = self.branch_name(issue_number)
+        preferred = branch or self.branch_name(issue_number)
         path = self.worktree_path(issue_number)
 
         self.fetch_origin()
 
-        existing = self.worktree_for_branch(branch)
+        if path.exists():
+            try:
+                current = self.current_branch(path)
+            except WorkspaceError as exc:
+                raise WorkspaceError(
+                    f"Worktree path exists but is not usable: {path}: {exc}"
+                ) from exc
+            logger.info(
+                "Reusing existing worktree for issue #%s at %s (%s)",
+                issue_number,
+                path,
+                current,
+            )
+            return WorktreeInfo(
+                issue_number=issue_number,
+                branch=current or preferred,
+                path=path,
+            )
+
+        existing = self.worktree_for_branch(preferred)
         if existing is not None:
             if existing.resolve() != path.resolve():
                 raise WorkspaceError(
-                    f"Branch {branch} is already checked out at {existing}, "
+                    f"Branch {preferred} is already checked out at {existing}, "
                     f"expected {path}"
                 )
-            logger.info("Reusing existing worktree for %s at %s", branch, path)
-            return WorktreeInfo(issue_number=issue_number, branch=branch, path=path)
-
-        if path.exists():
-            raise WorkspaceError(
-                f"Worktree path already exists but is not registered: {path}. "
-                "Remove it manually or choose another WORKSPACE_ROOT."
+            logger.info("Reusing existing worktree for %s at %s", preferred, path)
+            return WorktreeInfo(
+                issue_number=issue_number, branch=preferred, path=path
             )
 
         base_ref = f"origin/{self.config.base_branch}"
-        # Verify base exists remotely/locally.
         probe = self._git(["rev-parse", "--verify", base_ref], check=False)
         if probe.returncode != 0:
             raise WorkspaceError(
@@ -221,18 +241,46 @@ class WorkspaceManager:
                 f"Check BASE_BRANCH={self.config.base_branch!r}"
             )
 
-        if self.local_branch_exists(branch):
-            # Branch exists locally but has no worktree — attach worktree to it.
-            self._git(["worktree", "add", str(path), branch])
-        elif self.remote_branch_exists(branch):
-            # Track existing remote branch without force-resetting it.
+        if self.local_branch_exists(preferred):
+            self._git(["worktree", "add", str(path), preferred])
+        elif self.remote_branch_exists(preferred):
             self._git(
-                ["worktree", "add", "--track", "-b", branch, str(path), f"origin/{branch}"]
+                [
+                    "worktree",
+                    "add",
+                    "--track",
+                    "-b",
+                    preferred,
+                    str(path),
+                    f"origin/{preferred}",
+                ]
             )
         else:
-            self._git(["worktree", "add", "-b", branch, str(path), base_ref])
+            self._git(["worktree", "add", "-b", preferred, str(path), base_ref])
 
-        return WorktreeInfo(issue_number=issue_number, branch=branch, path=path)
+        return WorktreeInfo(
+            issue_number=issue_number, branch=preferred, path=path
+        )
+
+    def branch_has_unpublished_commits(self, worktree: Path, branch: str) -> bool:
+        """True when local branch has commits not on origin/branch (or vs base)."""
+        self.fetch_origin()
+        if self.remote_branch_exists(branch):
+            result = self._git(
+                ["rev-list", "--count", f"origin/{branch}..HEAD"],
+                cwd=worktree,
+                check=False,
+            )
+        else:
+            result = self._git(
+                ["rev-list", "--count", f"{self.base_ref()}..HEAD"],
+                cwd=worktree,
+                check=False,
+            )
+        try:
+            return int((result.stdout or "0").strip() or "0") > 0
+        except ValueError:
+            return False
 
     def base_ref(self) -> str:
         return f"origin/{self.config.base_branch}"

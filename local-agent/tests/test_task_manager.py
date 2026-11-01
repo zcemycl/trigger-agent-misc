@@ -167,3 +167,30 @@ def test_process_ready_issues_skips_existing_task(tmp_path: Path) -> None:
     # Should clear ready label but not enqueue another worker run that creates duplicate.
     github.replace_agent_label.assert_called()
     assert db.get_task(11).status == "review_pending"
+
+
+def test_process_ready_issues_retries_failed_task(tmp_path: Path) -> None:
+    cfg = _config(tmp_path)
+    db = Database(cfg.database_path)
+    db.create_task(
+        issue_number=8,
+        branch="agent/issue-8-second-order",
+        workspace=str(tmp_path / "wt"),
+        status="failed",
+    )
+    db.update_task(8, last_error="git commit failed")
+    github = MagicMock()
+    github.list_ready_issues.return_value = [_issue(8)]
+    workspaces = MagicMock()
+    agent = MagicMock()
+    mgr = TaskManager(cfg, db, github, workspaces, agent)
+
+    called: list[str] = []
+
+    def fake_retry(issue):  # type: ignore[no-untyped-def]
+        called.append(f"retry-{issue.number}")
+
+    mgr._handle_failed_retry = fake_retry  # type: ignore[method-assign]
+    mgr.process_ready_issues()
+    mgr.shutdown(wait=True)
+    assert called == ["retry-8"]

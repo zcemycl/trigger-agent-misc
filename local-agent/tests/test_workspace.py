@@ -106,7 +106,7 @@ def test_commit_all_and_refuse_path_collision(tmp_path: Path) -> None:
     # Create a colliding directory without registering a worktree.
     collision = tmp_path / "workspaces" / "issue-9"
     collision.mkdir(parents=True)
-    with pytest.raises(WorkspaceError, match="already exists"):
+    with pytest.raises(WorkspaceError, match="not usable"):
         mgr.ensure_worktree(9)
 
 

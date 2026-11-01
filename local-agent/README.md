@@ -105,7 +105,7 @@ Ignored: bots, untrusted users, duplicates, and comments on closed/merged PRs. I
 ## Flow (requirements 1–4)
 
 1. Poll open issues with `agent:ready`.
-2. Skip if SQLite already has the issue.
+2. Skip if SQLite already has the issue — unless status is `failed`, in which case `agent:ready` triggers a retry (publish existing work first, else re-run the agent).
 3. Swap label to `agent:running`, create task + branch `agent/issue-{n}` + worktree.
 4. Run Cursor Agent with the issue title/body (treated as untrusted data).
 5. Run `TEST_COMMAND` independently.

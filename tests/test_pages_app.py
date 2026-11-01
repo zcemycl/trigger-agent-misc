@@ -108,6 +108,14 @@ def test_app_includes_interactive_gradient_method_demos() -> None:
     assert "GRADIENT_METHOD_PAGES" in concepts
 
 
+def test_gradient_method_pages_include_where_explanations() -> None:
+    concepts = (
+        APP_ROOT / "src" / "components" / "GradientMethodConcepts.tsx"
+    ).read_text(encoding="utf-8")
+    assert "EquationWithWhere" in concepts
+    assert (APP_ROOT / "src" / "components" / "EquationWithWhere.tsx").is_file()
+
+
 def test_gradient_method_pages_include_step_by_step_tables() -> None:
     concepts = (
         APP_ROOT / "src" / "components" / "GradientMethodConcepts.tsx"

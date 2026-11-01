@@ -16,9 +16,35 @@ import {
   stochasticGradientDescent,
   type Vector,
 } from "../gradientMethod";
+import { EquationWithWhere, type WhereClause } from "./EquationWithWhere";
 import { MathBlock } from "./MathBlock";
 import { OptimizationStepTable } from "./OptimizationStepTable";
 import { TrajectoryChart } from "./TrajectoryChart";
+
+const WHERE_X_K: WhereClause = {
+  tex: "\\mathbf{x}_k",
+  description: "parameter vector before the update at step k",
+};
+const WHERE_ETA: WhereClause = {
+  tex: "\\eta",
+  description: "learning rate (slider η)",
+};
+const WHERE_GRAD_F: WhereClause = {
+  tex: "\\nabla f(\\mathbf{x}_k)",
+  description: "full gradient of the demo objective f",
+};
+const WHERE_FI: WhereClause = {
+  tex: "f_i(\\mathbf{x})",
+  description: "i-th term in the finite sum (see objective above)",
+};
+const WHERE_BETA: WhereClause = {
+  tex: "\\beta",
+  description: "momentum coefficient in [0, 1) (slider β)",
+};
+const WHERE_VK: WhereClause = {
+  tex: "\\mathbf{v}_k",
+  description: "velocity vector carried across steps",
+};
 
 function Section({
   title,
@@ -101,10 +127,9 @@ function GradientDescentDemo() {
     <Section
       title="Gradient descent (GD)"
       equations={
-        <>
+        <EquationWithWhere where={[WHERE_X_K, WHERE_ETA, WHERE_GRAD_F]}>
           <MathBlock tex="\mathbf{x}_{k+1} = \mathbf{x}_k - \eta \nabla f(\mathbf{x}_k)" />
-          <MathBlock tex="f(x) = \frac{1}{m}\sum_{i=1}^{m} \tfrac{1}{2}(x - c_i)^2" />
-        </>
+        </EquationWithWhere>
       }
     >
       <LearningRateSlider value={lr} onChange={setLr} />
@@ -141,7 +166,23 @@ function SgdDemo() {
     <Section
       title="Stochastic gradient descent (SGD)"
       equations={
-        <MathBlock tex="\mathbf{x}_{k+1} = \mathbf{x}_k - \eta \nabla f_{i_k}(\mathbf{x}_k)" />
+        <EquationWithWhere
+          where={[
+            WHERE_X_K,
+            WHERE_ETA,
+            {
+              tex: "i_k",
+              description: "index of one term sampled uniformly per step",
+            },
+            {
+              tex: "\\nabla f_{i_k}(\\mathbf{x}_k)",
+              description: "gradient of the sampled term f_{i_k} only",
+            },
+            WHERE_FI,
+          ]}
+        >
+          <MathBlock tex="\mathbf{x}_{k+1} = \mathbf{x}_k - \eta \nabla f_{i_k}(\mathbf{x}_k)" />
+        </EquationWithWhere>
       }
     >
       <LearningRateSlider value={lr} onChange={setLr} />
@@ -179,7 +220,28 @@ function MinibatchDemo() {
     <Section
       title="Mini-batch SGD"
       equations={
-        <MathBlock tex="\mathbf{x}_{k+1} = \mathbf{x}_k - \eta \cdot \frac{1}{|B|}\sum_{i \in B} \nabla f_i(\mathbf{x}_k)" />
+        <EquationWithWhere
+          where={[
+            WHERE_X_K,
+            WHERE_ETA,
+            {
+              tex: "B",
+              description:
+                "random mini-batch of term indices (resampled each step)",
+            },
+            {
+              tex: "|B|",
+              description: "batch size (slider |B|)",
+            },
+            {
+              tex: "\\nabla f_i(\\mathbf{x}_k)",
+              description: "gradient of term i at the current x_k",
+            },
+            WHERE_FI,
+          ]}
+        >
+          <MathBlock tex="\mathbf{x}_{k+1} = \mathbf{x}_k - \eta \cdot \frac{1}{|B|}\sum_{i \in B} \nabla f_i(\mathbf{x}_k)" />
+        </EquationWithWhere>
       }
     >
       <LearningRateSlider value={lr} onChange={setLr} />
@@ -228,10 +290,12 @@ function MomentumDemo() {
     <Section
       title="Momentum"
       equations={
-        <>
+        <EquationWithWhere
+          where={[WHERE_X_K, WHERE_ETA, WHERE_BETA, WHERE_VK, WHERE_GRAD_F]}
+        >
           <MathBlock tex="\mathbf{v}_{k+1} = \beta \mathbf{v}_k + \nabla f(\mathbf{x}_k)" />
           <MathBlock tex="\mathbf{x}_{k+1} = \mathbf{x}_k - \eta \mathbf{v}_{k+1}" />
-        </>
+        </EquationWithWhere>
       }
     >
       <LearningRateSlider value={lr} onChange={setLr} />
@@ -280,11 +344,26 @@ function NesterovDemo() {
     <Section
       title="Nesterov accelerated gradient"
       equations={
-        <>
+        <EquationWithWhere
+          where={[
+            WHERE_X_K,
+            WHERE_ETA,
+            WHERE_BETA,
+            WHERE_VK,
+            {
+              tex: "\\mathbf{y}_k",
+              description: "look-ahead point where the gradient is evaluated",
+            },
+            {
+              tex: "\\nabla f(\\mathbf{y}_k)",
+              description: "gradient at y_k instead of at x_k",
+            },
+          ]}
+        >
           <MathBlock tex="\mathbf{y}_k = \mathbf{x}_k - \beta \mathbf{v}_k" />
           <MathBlock tex="\mathbf{v}_{k+1} = \beta \mathbf{v}_k + \nabla f(\mathbf{y}_k)" />
           <MathBlock tex="\mathbf{x}_{k+1} = \mathbf{x}_k - \eta \mathbf{v}_{k+1}" />
-        </>
+        </EquationWithWhere>
       }
     >
       <LearningRateSlider value={lr} onChange={setLr} />
@@ -333,7 +412,20 @@ function HeavyBallDemo() {
     <Section
       title="Heavy-ball method"
       equations={
-        <MathBlock tex="\mathbf{x}_{k+1} = \mathbf{x}_k - \eta \nabla f(\mathbf{x}_k) + \beta(\mathbf{x}_k - \mathbf{x}_{k-1})" />
+        <EquationWithWhere
+          where={[
+            WHERE_X_K,
+            WHERE_ETA,
+            WHERE_BETA,
+            WHERE_GRAD_F,
+            {
+              tex: "\\mathbf{x}_{k-1}",
+              description: "previous iterate (omitted on the first step)",
+            },
+          ]}
+        >
+          <MathBlock tex="\mathbf{x}_{k+1} = \mathbf{x}_k - \eta \nabla f(\mathbf{x}_k) + \beta(\mathbf{x}_k - \mathbf{x}_{k-1})" />
+        </EquationWithWhere>
       }
     >
       <LearningRateSlider value={lr} onChange={setLr} />
@@ -381,13 +473,37 @@ export const GRADIENT_METHOD_PAGES = [
 export type GradientMethodPageId = (typeof GRADIENT_METHOD_PAGES)[number]["id"];
 
 function ConceptIntro() {
+  const centers = SAMPLE_CENTERS.join(", ");
   return (
     <div className="mb-6">
-      <MathBlock
-        tex={`f(\\mathbf{x}) = \\tfrac{1}{m}\\sum_i \\tfrac{1}{2}(x-c_i)^2, \\quad c_i \\in \\{${SAMPLE_CENTERS.join(
-          ", ",
-        )}\\}, \\quad \\mathbf{x}_0 = [3]`}
-      />
+      <EquationWithWhere
+        where={[
+          {
+            tex: "m",
+            description: "number of quadratic terms in the sum",
+          },
+          {
+            tex: "f_i(x)",
+            description: "single quadratic term ½(x − c_i)²",
+          },
+          {
+            tex: "c_i",
+            description: `fixed centers in the demo (${centers})`,
+          },
+          {
+            tex: "\\nabla f(\\mathbf{x})",
+            description: "mean of all per-term gradients ∇f_i(x)",
+          },
+          {
+            tex: "\\mathbf{x}_0",
+            description: "starting point [3] for every run on this page",
+          },
+        ]}
+      >
+        <MathBlock
+          tex={`f(\\mathbf{x}) = \\tfrac{1}{m}\\sum_{i=1}^{m} \\tfrac{1}{2}(x - c_i)^2`}
+        />
+      </EquationWithWhere>
     </div>
   );
 }

@@ -17,6 +17,7 @@ import {
   quadraticPhi,
   quadraticPhiPrime,
 } from "../quadratic";
+import { EquationWithWhere } from "./EquationWithWhere";
 import { MathBlock } from "./MathBlock";
 import { PhiChart } from "./PhiChart";
 
@@ -65,10 +66,29 @@ function ExactLineSearchDemo() {
     <Section
       title="Exact line search"
       equations={
-        <>
+        <EquationWithWhere
+          where={[
+            {
+              tex: "\\varphi(\\alpha)",
+              description: "objective along the search ray (see chapter intro)",
+            },
+            {
+              tex: "\\alpha",
+              description: "step size along direction p from current x",
+            },
+            {
+              tex: "[a, b]",
+              description: "bracket interval (slider b sets the upper bound)",
+            },
+            {
+              tex: "\\alpha^*",
+              description: "minimizer of φ on the bracket",
+            },
+          ]}
+        >
           <MathBlock tex="\varphi(\alpha) = f(\mathbf{x} + \alpha \mathbf{p})" />
           <MathBlock tex="\alpha^* = \arg\min_{\alpha \in [a,\, b]} \varphi(\alpha)" />
-        </>
+        </EquationWithWhere>
       }
     >
       <label className="flex flex-col gap-1 text-sm text-slate-300">
@@ -170,10 +190,25 @@ function ArmijoDemo() {
     <Section
       title="Armijo condition"
       equations={
-        <>
+        <EquationWithWhere
+          where={[
+            {
+              tex: "c_1",
+              description: "Armijo constant (fixed 0.1 in the chart bound)",
+            },
+            {
+              tex: "\\varphi(\\alpha)",
+              description: "trial value along the ray at step α",
+            },
+            {
+              tex: "\\varphi'(0)",
+              description: "slope of φ at α = 0 (chapter intro)",
+            },
+          ]}
+        >
           <MathBlock tex="0 < c_1 < 1" />
           <MathBlock tex="\varphi(\alpha) \le \varphi(0) + c_1\,\alpha\,\varphi'(0)" />
-        </>
+        </EquationWithWhere>
       }
     >
       <label className="flex flex-col gap-1 text-sm text-slate-300">
@@ -437,9 +472,26 @@ export type LineSearchPageId = (typeof LINE_SEARCH_PAGES)[number]["id"];
 function ConceptIntro() {
   return (
     <div className="mb-6">
-      <MathBlock
-        tex={`\\varphi(\\alpha) = (1-\\alpha)^2, \\qquad \\varphi'(0) = -2`}
-      />
+      <EquationWithWhere
+        where={[
+          {
+            tex: "\\varphi(\\alpha)",
+            description: "1D line-search objective used in every demo here",
+          },
+          {
+            tex: "\\varphi'(0)",
+            description:
+              "directional derivative at α = 0 (fixed at −2 for this φ)",
+          },
+          {
+            tex: "\\alpha",
+            description: "scalar step along the search direction",
+          },
+        ]}
+      >
+        <MathBlock tex={`\\varphi(\\alpha) = (1-\\alpha)^2`} />
+        <MathBlock tex={`\\varphi'(0) = -2`} />
+      </EquationWithWhere>
     </div>
   );
 }

@@ -14,30 +14,26 @@ import {
   nesterovAcceleratedGradient,
   stochasticGradientDescent,
 } from "../gradientMethod";
-import type { GradientIterationStep } from "../gradientMethod";
 import { MathBlock } from "./MathBlock";
 import { OptimizationStepTable } from "./OptimizationStepTable";
 import { TrajectoryChart } from "./TrajectoryChart";
 
 function Section({
   title,
-  description,
   equations,
   children,
 }: {
   title: string;
-  description: string;
   equations?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-6">
       <h2 className="text-lg font-medium text-white">{title}</h2>
-      <p className="mt-2 text-sm leading-relaxed text-slate-400">
-        {description}
-      </p>
       {equations ? <div className="mt-4 space-y-3">{equations}</div> : null}
-      <div className="mt-5 space-y-4">{children}</div>
+      <div className={`space-y-4 ${equations ? "mt-5" : "mt-4"}`}>
+        {children}
+      </div>
     </section>
   );
 }
@@ -52,50 +48,10 @@ function ResultStats({
   iterations: number;
 }) {
   return (
-    <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-      <div>
-        <dt className="text-slate-500">x</dt>
-        <dd className="font-mono text-emerald-300">{x.toFixed(4)}</dd>
-      </div>
-      <div>
-        <dt className="text-slate-500">f(x)</dt>
-        <dd className="font-mono text-emerald-300">{value.toExponential(3)}</dd>
-      </div>
-      <div>
-        <dt className="text-slate-500">Steps</dt>
-        <dd className="font-mono text-emerald-300">{iterations}</dd>
-      </div>
-      <div>
-        <dt className="text-slate-500">Target</dt>
-        <dd className="font-mono text-slate-300">
-          {FINITE_SUM_OPTIMUM.toFixed(4)}
-        </dd>
-      </div>
-    </dl>
-  );
-}
-
-function StepByStepWalkthrough({
-  steps,
-  methodName,
-}: {
-  steps: GradientIterationStep[];
-  methodName: string;
-}) {
-  return (
-    <div className="space-y-2">
-      <h3 className="text-sm font-medium text-slate-300">
-        Step-by-step example
-      </h3>
-      <p className="text-xs leading-relaxed text-slate-500">
-        Each row is one iteration of the optimizer starting from x₀ = 3, showing
-        how {methodName} updates x until convergence.
-      </p>
-      <OptimizationStepTable
-        steps={steps}
-        caption={`${methodName} step-by-step iterations`}
-      />
-    </div>
+    <p className="font-mono text-sm text-emerald-300">
+      x = {x.toFixed(4)} · f(x) = {value.toExponential(3)} · {iterations} · x* ≈{" "}
+      {FINITE_SUM_OPTIMUM.toFixed(4)}
+    </p>
   );
 }
 
@@ -108,7 +64,7 @@ function LearningRateSlider({
 }) {
   return (
     <label className="flex flex-col gap-1 text-sm text-slate-300">
-      Learning rate = {value.toFixed(2)}
+      η = {value.toFixed(2)}
       <input
         type="range"
         min={0.01}
@@ -142,7 +98,6 @@ function GradientDescentDemo() {
   return (
     <Section
       title="Gradient descent (GD)"
-      description="Follow the negative full gradient each step on a smooth finite-sum quadratic."
       equations={
         <>
           <MathBlock tex="\mathbf{x}_{k+1} = \mathbf{x}_k - \eta \nabla f(\mathbf{x}_k)" />
@@ -152,9 +107,9 @@ function GradientDescentDemo() {
     >
       <LearningRateSlider value={lr} onChange={setLr} />
       <TrajectoryChart objective={objective1d} history={historyX} />
-      <StepByStepWalkthrough
+      <OptimizationStepTable
         steps={result.steps}
-        methodName="gradient descent"
+        caption="Gradient descent step-by-step iterations"
       />
       <ResultStats
         x={result.x[0]}
@@ -183,14 +138,16 @@ function SgdDemo() {
   return (
     <Section
       title="Stochastic gradient descent (SGD)"
-      description="Estimate the gradient from one randomly sampled term per iteration."
       equations={
         <MathBlock tex="\mathbf{x}_{k+1} = \mathbf{x}_k - \eta \nabla f_{i_k}(\mathbf{x}_k)" />
       }
     >
       <LearningRateSlider value={lr} onChange={setLr} />
       <TrajectoryChart objective={objective1d} history={historyX} />
-      <StepByStepWalkthrough steps={result.steps} methodName="SGD" />
+      <OptimizationStepTable
+        steps={result.steps}
+        caption="SGD step-by-step iterations"
+      />
       <ResultStats
         x={result.x[0]}
         value={result.value}
@@ -219,14 +176,13 @@ function MinibatchDemo() {
   return (
     <Section
       title="Mini-batch SGD"
-      description="Average gradients over a small batch of samples each step."
       equations={
         <MathBlock tex="\mathbf{x}_{k+1} = \mathbf{x}_k - \eta \cdot \frac{1}{|B|}\sum_{i \in B} \nabla f_i(\mathbf{x}_k)" />
       }
     >
       <LearningRateSlider value={lr} onChange={setLr} />
       <label className="flex flex-col gap-1 text-sm text-slate-300">
-        Batch size = {batchSize}
+        |B| = {batchSize}
         <input
           type="range"
           min={1}
@@ -238,7 +194,10 @@ function MinibatchDemo() {
         />
       </label>
       <TrajectoryChart objective={objective1d} history={historyX} />
-      <StepByStepWalkthrough steps={result.steps} methodName="mini-batch SGD" />
+      <OptimizationStepTable
+        steps={result.steps}
+        caption="Mini-batch SGD step-by-step iterations"
+      />
       <ResultStats
         x={result.x[0]}
         value={result.value}
@@ -266,7 +225,6 @@ function MomentumDemo() {
   return (
     <Section
       title="Momentum"
-      description="Accumulate historical gradients in a velocity vector to damp oscillations."
       equations={
         <>
           <MathBlock tex="\mathbf{v}_{k+1} = \beta \mathbf{v}_k + \nabla f(\mathbf{x}_k)" />
@@ -276,7 +234,7 @@ function MomentumDemo() {
     >
       <LearningRateSlider value={lr} onChange={setLr} />
       <label className="flex flex-col gap-1 text-sm text-slate-300">
-        Momentum β = {beta.toFixed(2)}
+        β = {beta.toFixed(2)}
         <input
           type="range"
           min={0}
@@ -288,7 +246,10 @@ function MomentumDemo() {
         />
       </label>
       <TrajectoryChart objective={objective1d} history={historyX} />
-      <StepByStepWalkthrough steps={result.steps} methodName="momentum" />
+      <OptimizationStepTable
+        steps={result.steps}
+        caption="Momentum step-by-step iterations"
+      />
       <ResultStats
         x={result.x[0]}
         value={result.value}
@@ -316,7 +277,6 @@ function NesterovDemo() {
   return (
     <Section
       title="Nesterov accelerated gradient"
-      description="Look ahead along velocity before evaluating the gradient."
       equations={
         <>
           <MathBlock tex="\mathbf{y}_k = \mathbf{x}_k - \beta \mathbf{v}_k" />
@@ -326,7 +286,7 @@ function NesterovDemo() {
     >
       <LearningRateSlider value={lr} onChange={setLr} />
       <label className="flex flex-col gap-1 text-sm text-slate-300">
-        Momentum β = {beta.toFixed(2)}
+        β = {beta.toFixed(2)}
         <input
           type="range"
           min={0}
@@ -338,9 +298,9 @@ function NesterovDemo() {
         />
       </label>
       <TrajectoryChart objective={objective1d} history={historyX} />
-      <StepByStepWalkthrough
+      <OptimizationStepTable
         steps={result.steps}
-        methodName="Nesterov accelerated gradient"
+        caption="Nesterov accelerated gradient step-by-step iterations"
       />
       <ResultStats
         x={result.x[0]}
@@ -369,14 +329,13 @@ function HeavyBallDemo() {
   return (
     <Section
       title="Heavy-ball method"
-      description="Use momentum on the position update (Polyak heavy-ball)."
       equations={
         <MathBlock tex="\mathbf{x}_{k+1} = \mathbf{x}_k - \eta \nabla f(\mathbf{x}_k) + \beta(\mathbf{x}_k - \mathbf{x}_{k-1})" />
       }
     >
       <LearningRateSlider value={lr} onChange={setLr} />
       <label className="flex flex-col gap-1 text-sm text-slate-300">
-        Heavy-ball β = {beta.toFixed(2)}
+        β = {beta.toFixed(2)}
         <input
           type="range"
           min={0}
@@ -388,7 +347,10 @@ function HeavyBallDemo() {
         />
       </label>
       <TrajectoryChart objective={objective1d} history={historyX} />
-      <StepByStepWalkthrough steps={result.steps} methodName="heavy-ball" />
+      <OptimizationStepTable
+        steps={result.steps}
+        caption="Heavy-ball step-by-step iterations"
+      />
       <ResultStats
         x={result.x[0]}
         value={result.value}
@@ -417,20 +379,11 @@ export type GradientMethodPageId = (typeof GRADIENT_METHOD_PAGES)[number]["id"];
 
 function ConceptIntro() {
   return (
-    <div className="mb-6 space-y-3 text-slate-400">
-      <p className="text-sm leading-relaxed">
-        Demos minimize the same finite-sum quadratic as{" "}
-        <code className="rounded bg-slate-800 px-1.5 py-0.5 text-emerald-300">
-          evals/gradient_method_eval.py
-        </code>{" "}
-        and the Python module{" "}
-        <code className="rounded bg-slate-800 px-1.5 py-0.5 text-emerald-300">
-          trigger_agent_misc.optimization.gradient_method
-        </code>
-        .
-      </p>
+    <div className="mb-6">
       <MathBlock
-        tex={`c_i \\in \\{${SAMPLE_CENTERS.join(", ")}\\}, \\quad x_0 = 3`}
+        tex={`f(x) = \\tfrac{1}{m}\\sum_i \\tfrac{1}{2}(x-c_i)^2, \\quad c_i \\in \\{${SAMPLE_CENTERS.join(
+          ", ",
+        )}\\}, \\quad x_0 = 3`}
       />
     </div>
   );
@@ -450,11 +403,8 @@ export function GradientMethodConcepts({
   return (
     <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
       <aside className="w-full shrink-0 lg:sticky lg:top-6 lg:w-56">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-          {GRADIENT_METHOD_CHAPTER}
-        </p>
         <nav
-          className="mt-3 flex flex-col gap-1"
+          className="flex flex-col gap-1"
           aria-label={`${GRADIENT_METHOD_CHAPTER} concepts`}
         >
           {GRADIENT_METHOD_PAGES.map((page) => {

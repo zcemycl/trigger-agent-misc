@@ -24,7 +24,6 @@ describe("App", () => {
     expect(
       screen.getByRole("heading", { name: "Gradient descent (GD)" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Step-by-step example")).toBeInTheDocument();
     expect(
       screen.getByRole("table", { name: /gradient descent step-by-step/i }),
     ).toBeInTheDocument();

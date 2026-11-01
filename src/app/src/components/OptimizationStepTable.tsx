@@ -68,9 +68,8 @@ export function OptimizationStepTable({
         </tbody>
       </table>
       {hidden > 0 ? (
-        <p className="border-t border-slate-800 px-3 py-2 text-xs text-slate-500">
-          Showing first {visible.length} of {steps.length} iterations until
-          convergence.
+        <p className="border-t border-slate-800 px-3 py-2 font-mono text-xs text-slate-500">
+          +{hidden} / {steps.length}
         </p>
       ) : null}
     </div>

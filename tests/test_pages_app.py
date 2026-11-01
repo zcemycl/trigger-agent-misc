@@ -113,9 +113,14 @@ def test_gradient_method_pages_include_step_by_step_tables() -> None:
         APP_ROOT / "src" / "components" / "GradientMethodConcepts.tsx"
     ).read_text(encoding="utf-8")
     assert "OptimizationStepTable" in concepts
-    assert "Step-by-step example" in concepts
-    assert concepts.count("StepByStepWalkthrough") >= 6
+    assert concepts.count("OptimizationStepTable") >= 6
     assert (APP_ROOT / "src" / "components" / "OptimizationStepTable.tsx").is_file()
+
+
+def test_agents_md_documents_pages_app_ui_guidance() -> None:
+    agents = (REPO_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    assert "src/app" in agents
+    assert "secondary labels" in agents.lower() or "redundant" in agents.lower()
 
 
 def test_app_uses_chapter_nav_for_line_search_and_gradient_methods() -> None:

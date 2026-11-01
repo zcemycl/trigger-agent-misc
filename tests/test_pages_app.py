@@ -91,6 +91,30 @@ def test_app_uses_sidebar_for_line_search_chapters() -> None:
     assert "aria-label={`${LINE_SEARCH_CHAPTER} concepts`}" in concepts
 
 
+def test_app_includes_interactive_gradient_method_demos() -> None:
+    concepts = (
+        APP_ROOT / "src" / "components" / "GradientMethodConcepts.tsx"
+    ).read_text(encoding="utf-8")
+    for title in (
+        "Gradient descent (GD)",
+        "Stochastic gradient descent (SGD)",
+        "Mini-batch SGD",
+        "Momentum",
+        "Nesterov accelerated gradient",
+        "Heavy-ball method",
+    ):
+        assert title in concepts
+    assert (APP_ROOT / "src" / "gradientMethod.ts").is_file()
+    assert "GRADIENT_METHOD_PAGES" in concepts
+
+
+def test_app_uses_chapter_nav_for_line_search_and_gradient_methods() -> None:
+    app_tsx = (APP_ROOT / "src" / "App.tsx").read_text(encoding="utf-8")
+    assert "Gradient methods" in app_tsx
+    assert "Line search" in app_tsx
+    assert "GradientMethodConcepts" in app_tsx
+
+
 def test_app_renders_latex_equations_for_line_search() -> None:
     pkg = json.loads((APP_ROOT / "package.json").read_text(encoding="utf-8"))
     assert "katex" in pkg.get("dependencies", {})

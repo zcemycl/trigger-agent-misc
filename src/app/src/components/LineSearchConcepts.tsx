@@ -12,15 +12,14 @@ import {
   wolfeCurvature,
 } from "../lineSearch";
 import {
-  QUADRATIC_PHI0,
-  QUADRATIC_PHI_PRIME0,
-  quadraticPhi,
-  quadraticPhiPrime,
-} from "../quadratic";
-import {
   ConceptChapterSidebar,
   type ConceptViewMode,
 } from "./ConceptChapterSidebar";
+import {
+  DemoNoiseControls,
+  DemoNoiseProvider,
+  useNoisyQuadraticRay,
+} from "./DemoNoise";
 import {
   ConceptPageOverview,
   type ConceptOverview,
@@ -64,10 +63,11 @@ function StatusBadge({ ok, label }: { ok: boolean; label: string }) {
 }
 
 function ExactLineSearchDemo() {
+  const { phi } = useNoisyQuadraticRay();
   const [bracketHi, setBracketHi] = useState(2);
   const result = useMemo(
-    () => exactLineSearch(quadraticPhi, { a: 0, b: bracketHi }),
-    [bracketHi],
+    () => exactLineSearch(phi, { a: 0, b: bracketHi }),
+    [bracketHi, phi],
   );
 
   return (
@@ -112,7 +112,7 @@ function ExactLineSearchDemo() {
         />
       </label>
       <PhiChart
-        phi={quadraticPhi}
+        phi={phi}
         bracket={{ a: 0, b: bracketHi }}
         markers={[
           {
@@ -131,14 +131,15 @@ function ExactLineSearchDemo() {
 }
 
 function BacktrackingDemo() {
+  const { phi, phi0, phiPrime0 } = useNoisyQuadraticRay();
   const [alpha0, setAlpha0] = useState(1.5);
   const trials = useMemo(
-    () => backtrackingTrialAlphas(quadraticPhi, QUADRATIC_PHI_PRIME0, alpha0),
-    [alpha0],
+    () => backtrackingTrialAlphas(phi, phiPrime0, alpha0),
+    [alpha0, phi, phiPrime0],
   );
   const result = useMemo(
-    () => backtrackingArmijo(quadraticPhi, QUADRATIC_PHI_PRIME0, { alpha0 }),
-    [alpha0],
+    () => backtrackingArmijo(phi, phiPrime0, { alpha0 }),
+    [alpha0, phi, phiPrime0],
   );
 
   return (
@@ -164,7 +165,7 @@ function BacktrackingDemo() {
         />
       </label>
       <PhiChart
-        phi={quadraticPhi}
+        phi={phi}
         markers={trials.map((a, i) => ({
           alpha: a,
           label:
@@ -174,8 +175,8 @@ function BacktrackingDemo() {
           color: i === trials.length - 1 ? "#34d399" : "#f87171",
         }))}
         armijoLineAtAlpha={result.alpha}
-        phi0={QUADRATIC_PHI0}
-        phiPrime0={QUADRATIC_PHI_PRIME0}
+        phi0={phi0}
+        phiPrime0={phiPrime0}
       />
       <p className="font-mono text-sm text-emerald-300">
         α = {result.alpha.toFixed(4)} · {result.iterations}
@@ -185,14 +186,10 @@ function BacktrackingDemo() {
 }
 
 function ArmijoDemo() {
+  const { phi, phi0, phiPrime0 } = useNoisyQuadraticRay();
   const [alpha, setAlpha] = useState(0.5);
-  const phiA = quadraticPhi(alpha);
-  const holds = armijoSufficientDecrease(
-    QUADRATIC_PHI0,
-    phiA,
-    alpha,
-    QUADRATIC_PHI_PRIME0,
-  );
+  const phiA = phi(alpha);
+  const holds = armijoSufficientDecrease(phi0, phiA, alpha, phiPrime0);
 
   return (
     <Section
@@ -232,10 +229,10 @@ function ArmijoDemo() {
         />
       </label>
       <PhiChart
-        phi={quadraticPhi}
+        phi={phi}
         armijoLineAtAlpha={alpha}
-        phi0={QUADRATIC_PHI0}
-        phiPrime0={QUADRATIC_PHI_PRIME0}
+        phi0={phi0}
+        phiPrime0={phiPrime0}
         markers={[
           {
             alpha,
@@ -250,22 +247,15 @@ function ArmijoDemo() {
 }
 
 function WolfeDemo() {
+  const { phi, phiPrime, phi0, phiPrime0 } = useNoisyQuadraticRay();
   const [alpha, setAlpha] = useState(1);
-  const phiA = quadraticPhi(alpha);
-  const phiPA = quadraticPhiPrime(alpha);
-  const armijo = armijoSufficientDecrease(
-    QUADRATIC_PHI0,
-    phiA,
-    alpha,
-    QUADRATIC_PHI_PRIME0,
-  );
-  const curvature = wolfeCurvature(phiPA, QUADRATIC_PHI_PRIME0);
+  const phiA = phi(alpha);
+  const phiPA = phiPrime(alpha);
+  const armijo = armijoSufficientDecrease(phi0, phiA, alpha, phiPrime0);
+  const curvature = wolfeCurvature(phiPA, phiPrime0);
   const run = useMemo(
-    () =>
-      lineSearchWolfe(quadraticPhi, quadraticPhiPrime, QUADRATIC_PHI_PRIME0, {
-        alpha0: 1,
-      }),
-    [],
+    () => lineSearchWolfe(phi, phiPrime, phiPrime0, { alpha0: 1 }),
+    [phi, phiPrime, phiPrime0],
   );
 
   return (
@@ -296,7 +286,7 @@ function WolfeDemo() {
         />
       </label>
       <PhiChart
-        phi={quadraticPhi}
+        phi={phi}
         markers={[
           {
             alpha,
@@ -315,32 +305,21 @@ function WolfeDemo() {
         <StatusBadge ok={curvature} label="Wolfe curvature" />
       </div>
       <p className="font-mono text-sm text-emerald-300">
-        α = {run.alpha.toFixed(4)} · φ′(α) ={" "}
-        {quadraticPhiPrime(run.alpha).toFixed(4)}
+        α = {run.alpha.toFixed(4)} · φ′(α) = {phiPrime(run.alpha).toFixed(4)}
       </p>
     </Section>
   );
 }
 
 function StrongWolfeDemo() {
+  const { phi, phiPrime, phi0, phiPrime0 } = useNoisyQuadraticRay();
   const [alpha, setAlpha] = useState(0.8);
-  const phiPA = quadraticPhiPrime(alpha);
-  const armijo = armijoSufficientDecrease(
-    QUADRATIC_PHI0,
-    quadraticPhi(alpha),
-    alpha,
-    QUADRATIC_PHI_PRIME0,
-  );
-  const strong = strongWolfeCurvature(phiPA, QUADRATIC_PHI_PRIME0);
+  const phiPA = phiPrime(alpha);
+  const armijo = armijoSufficientDecrease(phi0, phi(alpha), alpha, phiPrime0);
+  const strong = strongWolfeCurvature(phiPA, phiPrime0);
   const run = useMemo(
-    () =>
-      lineSearchStrongWolfe(
-        quadraticPhi,
-        quadraticPhiPrime,
-        QUADRATIC_PHI_PRIME0,
-        { alpha0: 1 },
-      ),
-    [],
+    () => lineSearchStrongWolfe(phi, phiPrime, phiPrime0, { alpha0: 1 }),
+    [phi, phiPrime, phiPrime0],
   );
 
   return (
@@ -371,7 +350,7 @@ function StrongWolfeDemo() {
         />
       </label>
       <PhiChart
-        phi={quadraticPhi}
+        phi={phi}
         markers={[
           { alpha, label: "trial", color: strong ? "#34d399" : "#f87171" },
           { alpha: run.alpha, label: "strong Wolfe LS", color: "#818cf8" },
@@ -383,29 +362,23 @@ function StrongWolfeDemo() {
       </div>
       <p className="font-mono text-sm text-emerald-300">
         |φ′(α)| = {Math.abs(phiPA).toFixed(4)} · c₂|φ′(0)| ={" "}
-        {(0.9 * Math.abs(QUADRATIC_PHI_PRIME0)).toFixed(4)}
+        {(0.9 * Math.abs(phiPrime0)).toFixed(4)}
       </p>
     </Section>
   );
 }
 
 function GoldsteinDemo() {
+  const { phi, phi0, phiPrime0 } = useNoisyQuadraticRay();
   const [alpha, setAlpha] = useState(0.35);
   const c = 0.1;
-  const phiA = quadraticPhi(alpha);
-  const lower = QUADRATIC_PHI0 + (1 - c) * alpha * QUADRATIC_PHI_PRIME0;
-  const upper = QUADRATIC_PHI0 + c * alpha * QUADRATIC_PHI_PRIME0;
-  const holds = goldsteinConditions(
-    QUADRATIC_PHI0,
-    phiA,
-    alpha,
-    QUADRATIC_PHI_PRIME0,
-    c,
-  );
+  const phiA = phi(alpha);
+  const lower = phi0 + (1 - c) * alpha * phiPrime0;
+  const upper = phi0 + c * alpha * phiPrime0;
+  const holds = goldsteinConditions(phi0, phiA, alpha, phiPrime0, c);
   const run = useMemo(
-    () =>
-      lineSearchGoldstein(quadraticPhi, QUADRATIC_PHI_PRIME0, { alpha0: 1 }),
-    [],
+    () => lineSearchGoldstein(phi, phiPrime0, { alpha0: 1 }),
+    [phi, phiPrime0],
   );
 
   return (
@@ -435,7 +408,7 @@ function GoldsteinDemo() {
         />
       </label>
       <PhiChart
-        phi={quadraticPhi}
+        phi={phi}
         band={{
           alpha,
           yLower: lower,
@@ -602,7 +575,8 @@ export type LineSearchPageId = (typeof LINE_SEARCH_PAGES)[number]["id"];
 
 function ConceptIntro() {
   return (
-    <div className="mb-6">
+    <div className="mb-6 space-y-4">
+      <DemoNoiseControls />
       <EquationWithWhere
         where={[
           {
@@ -627,7 +601,7 @@ function ConceptIntro() {
   );
 }
 
-export function LineSearchConcepts({
+function LineSearchConceptsContent({
   initialPageId = "exact",
 }: {
   initialPageId?: LineSearchPageId;
@@ -663,5 +637,15 @@ export function LineSearchConcepts({
         )}
       </div>
     </div>
+  );
+}
+
+export function LineSearchConcepts(
+  props: { initialPageId?: LineSearchPageId } = {},
+) {
+  return (
+    <DemoNoiseProvider>
+      <LineSearchConceptsContent {...props} />
+    </DemoNoiseProvider>
   );
 }

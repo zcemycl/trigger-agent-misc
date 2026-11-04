@@ -203,3 +203,15 @@ def test_app_uses_chapter_switcher() -> None:
     assert "SecondOrderConcepts" in app_tsx
     assert "Optimization Concepts" in app_tsx
     assert 'aria-label="Optimization chapters"' in app_tsx
+
+
+def test_optimization_chapters_expose_noise_mode() -> None:
+    for name in (
+        "GradientMethodConcepts.tsx",
+        "LineSearchConcepts.tsx",
+        "SecondOrderConcepts.tsx",
+    ):
+        text = (APP_ROOT / "src" / "components" / name).read_text(encoding="utf-8")
+        assert "DemoNoiseProvider" in text
+        assert "DemoNoiseControls" in text
+    assert (APP_ROOT / "src" / "demoNoise.ts").is_file()

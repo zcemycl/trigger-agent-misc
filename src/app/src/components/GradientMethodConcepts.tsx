@@ -1,11 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import {
-  FINITE_SUM_OPTIMUM,
-  finiteSumGrad,
-  finiteSumGradAtIndex,
-  finiteSumObjective,
-  SAMPLE_CENTERS,
-} from "../finiteSumQuadratic";
+import { FINITE_SUM_OPTIMUM, SAMPLE_CENTERS } from "../finiteSumQuadratic";
 import {
   formatVector,
   gradientDescent,
@@ -16,6 +10,11 @@ import {
   stochasticGradientDescent,
   type Vector,
 } from "../gradientMethod";
+import {
+  DemoNoiseControls,
+  DemoNoiseProvider,
+  useFiniteSumProblem,
+} from "./DemoNoise";
 import {
   ConceptChapterSidebar,
   type ConceptViewMode,
@@ -114,20 +113,24 @@ function LearningRateSlider({
   );
 }
 
-const objective1d = (x: number) => finiteSumObjective([x]);
 const x0 = [3.0];
 const numSamples = SAMPLE_CENTERS.length;
 
 function GradientDescentDemo() {
+  const problem = useFiniteSumProblem();
+  const chartObjective = useMemo(
+    () => (x: number) => problem.objective([x]),
+    [problem],
+  );
   const [lr, setLr] = useState(0.2);
   const result = useMemo(
     () =>
-      gradientDescent(x0, finiteSumObjective, finiteSumGrad, {
+      gradientDescent(x0, problem.objective, problem.grad, {
         learningRate: lr,
         maxIter: 500,
         tol: 1e-8,
       }),
-    [lr],
+    [lr, problem],
   );
   const historyX = result.history.map((v) => v[0]);
 
@@ -141,7 +144,7 @@ function GradientDescentDemo() {
       }
     >
       <LearningRateSlider value={lr} onChange={setLr} />
-      <TrajectoryChart objective={objective1d} history={historyX} />
+      <TrajectoryChart objective={chartObjective} history={historyX} />
       <OptimizationStepTable
         steps={result.steps}
         caption="Gradient descent step-by-step iterations"
@@ -156,17 +159,22 @@ function GradientDescentDemo() {
 }
 
 function SgdDemo() {
+  const problem = useFiniteSumProblem();
+  const chartObjective = useMemo(
+    () => (x: number) => problem.objective([x]),
+    [problem],
+  );
   const [lr, setLr] = useState(0.05);
   const result = useMemo(
     () =>
       stochasticGradientDescent(
         x0,
-        finiteSumObjective,
-        finiteSumGradAtIndex,
+        problem.objective,
+        problem.gradAtIndex,
         numSamples,
         { learningRate: lr, maxIter: 800, tol: 1e-8, seed: 0 },
       ),
-    [lr],
+    [lr, problem],
   );
   const historyX = result.history.map((v) => v[0]);
 
@@ -194,7 +202,7 @@ function SgdDemo() {
       }
     >
       <LearningRateSlider value={lr} onChange={setLr} />
-      <TrajectoryChart objective={objective1d} history={historyX} />
+      <TrajectoryChart objective={chartObjective} history={historyX} />
       <OptimizationStepTable
         steps={result.steps}
         caption="SGD step-by-step iterations"
@@ -209,18 +217,23 @@ function SgdDemo() {
 }
 
 function MinibatchDemo() {
+  const problem = useFiniteSumProblem();
+  const chartObjective = useMemo(
+    () => (x: number) => problem.objective([x]),
+    [problem],
+  );
   const [lr, setLr] = useState(0.1);
   const [batchSize, setBatchSize] = useState(2);
   const result = useMemo(
     () =>
-      minibatchSgd(x0, finiteSumObjective, finiteSumGradAtIndex, numSamples, {
+      minibatchSgd(x0, problem.objective, problem.gradAtIndex, numSamples, {
         learningRate: lr,
         batchSize,
         maxIter: 400,
         tol: 1e-8,
         seed: 1,
       }),
-    [lr, batchSize],
+    [lr, batchSize, problem],
   );
   const historyX = result.history.map((v) => v[0]);
 
@@ -265,7 +278,7 @@ function MinibatchDemo() {
           className="accent-emerald-500"
         />
       </label>
-      <TrajectoryChart objective={objective1d} history={historyX} />
+      <TrajectoryChart objective={chartObjective} history={historyX} />
       <OptimizationStepTable
         steps={result.steps}
         caption="Mini-batch SGD step-by-step iterations"
@@ -280,17 +293,22 @@ function MinibatchDemo() {
 }
 
 function MomentumDemo() {
+  const problem = useFiniteSumProblem();
+  const chartObjective = useMemo(
+    () => (x: number) => problem.objective([x]),
+    [problem],
+  );
   const [lr, setLr] = useState(0.05);
   const [beta, setBeta] = useState(0.9);
   const result = useMemo(
     () =>
-      momentum(x0, finiteSumObjective, finiteSumGrad, {
+      momentum(x0, problem.objective, problem.grad, {
         learningRate: lr,
         beta,
         maxIter: 400,
         tol: 1e-8,
       }),
-    [lr, beta],
+    [lr, beta, problem],
   );
   const historyX = result.history.map((v) => v[0]);
 
@@ -319,7 +337,7 @@ function MomentumDemo() {
           className="accent-emerald-500"
         />
       </label>
-      <TrajectoryChart objective={objective1d} history={historyX} />
+      <TrajectoryChart objective={chartObjective} history={historyX} />
       <OptimizationStepTable
         steps={result.steps}
         caption="Momentum step-by-step iterations"
@@ -334,17 +352,22 @@ function MomentumDemo() {
 }
 
 function NesterovDemo() {
+  const problem = useFiniteSumProblem();
+  const chartObjective = useMemo(
+    () => (x: number) => problem.objective([x]),
+    [problem],
+  );
   const [lr, setLr] = useState(0.05);
   const [beta, setBeta] = useState(0.9);
   const result = useMemo(
     () =>
-      nesterovAcceleratedGradient(x0, finiteSumObjective, finiteSumGrad, {
+      nesterovAcceleratedGradient(x0, problem.objective, problem.grad, {
         learningRate: lr,
         beta,
         maxIter: 400,
         tol: 1e-8,
       }),
-    [lr, beta],
+    [lr, beta, problem],
   );
   const historyX = result.history.map((v) => v[0]);
 
@@ -387,7 +410,7 @@ function NesterovDemo() {
           className="accent-emerald-500"
         />
       </label>
-      <TrajectoryChart objective={objective1d} history={historyX} />
+      <TrajectoryChart objective={chartObjective} history={historyX} />
       <OptimizationStepTable
         steps={result.steps}
         caption="Nesterov accelerated gradient step-by-step iterations"
@@ -402,17 +425,22 @@ function NesterovDemo() {
 }
 
 function HeavyBallDemo() {
+  const problem = useFiniteSumProblem();
+  const chartObjective = useMemo(
+    () => (x: number) => problem.objective([x]),
+    [problem],
+  );
   const [lr, setLr] = useState(0.05);
   const [beta, setBeta] = useState(0.85);
   const result = useMemo(
     () =>
-      heavyBallMethod(x0, finiteSumObjective, finiteSumGrad, {
+      heavyBallMethod(x0, problem.objective, problem.grad, {
         learningRate: lr,
         beta,
         maxIter: 400,
         tol: 1e-8,
       }),
-    [lr, beta],
+    [lr, beta, problem],
   );
   const historyX = result.history.map((v) => v[0]);
 
@@ -449,7 +477,7 @@ function HeavyBallDemo() {
           className="accent-emerald-500"
         />
       </label>
-      <TrajectoryChart objective={objective1d} history={historyX} />
+      <TrajectoryChart objective={chartObjective} history={historyX} />
       <OptimizationStepTable
         steps={result.steps}
         caption="Heavy-ball step-by-step iterations"
@@ -623,7 +651,8 @@ export type GradientMethodPageId = (typeof GRADIENT_METHOD_PAGES)[number]["id"];
 function ConceptIntro() {
   const centers = SAMPLE_CENTERS.join(", ");
   return (
-    <div className="mb-6">
+    <div className="mb-6 space-y-4">
+      <DemoNoiseControls />
       <EquationWithWhere
         where={[
           {
@@ -656,7 +685,7 @@ function ConceptIntro() {
   );
 }
 
-export function GradientMethodConcepts({
+function GradientMethodConceptsContent({
   initialPageId = "gd",
 }: {
   initialPageId?: GradientMethodPageId;
@@ -692,5 +721,15 @@ export function GradientMethodConcepts({
         )}
       </div>
     </div>
+  );
+}
+
+export function GradientMethodConcepts(
+  props: { initialPageId?: GradientMethodPageId } = {},
+) {
+  return (
+    <DemoNoiseProvider>
+      <GradientMethodConceptsContent {...props} />
+    </DemoNoiseProvider>
   );
 }

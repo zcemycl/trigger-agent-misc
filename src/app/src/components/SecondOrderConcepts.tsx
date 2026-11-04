@@ -9,20 +9,17 @@ import {
   newtonsMethod,
   quasiNewtonBfgs,
   type OptimizeResult,
-  type Vec,
 } from "../secondOrder";
-import {
-  leastSquaresValue,
-  rosenbrockJacobian,
-  rosenbrockResidual,
-  shiftedQuadratic,
-  shiftedQuadraticGrad,
-  shiftedQuadraticHess,
-} from "../secondOrderProblems";
 import {
   ConceptChapterSidebar,
   type ConceptViewMode,
 } from "./ConceptChapterSidebar";
+import {
+  DemoNoiseControls,
+  DemoNoiseProvider,
+  useRosenbrockLeastSquares,
+  useShiftedQuadraticProblem,
+} from "./DemoNoise";
 import {
   ConceptPageOverview,
   type ConceptOverview,
@@ -147,17 +144,12 @@ function QuadraticStartSliders({
 }
 
 function NewtonDemo() {
+  const { objective, gradient, hessian } = useShiftedQuadraticProblem();
   const [x0, setX0] = useState(0);
   const [y0, setY0] = useState(0);
   const result = useMemo(
-    () =>
-      newtonsMethod(
-        shiftedQuadratic,
-        shiftedQuadraticGrad,
-        shiftedQuadraticHess,
-        [x0, y0],
-      ),
-    [x0, y0],
+    () => newtonsMethod(objective, gradient, hessian, [x0, y0]),
+    [objective, gradient, hessian, x0, y0],
   );
   return (
     <Section
@@ -176,7 +168,7 @@ function NewtonDemo() {
           setY0(b);
         }}
       />
-      <ContourPathChart objective={shiftedQuadratic} path={result.path} />
+      <ContourPathChart objective={objective} path={result.path} />
       <OptimizationStepTable
         steps={result.steps}
         caption="Newton's method step-by-step iterations"
@@ -187,17 +179,12 @@ function NewtonDemo() {
 }
 
 function DampedNewtonDemo() {
+  const { objective, gradient, hessian } = useShiftedQuadraticProblem();
   const [x0, setX0] = useState(3);
   const [y0, setY0] = useState(-2);
   const result = useMemo(
-    () =>
-      dampedNewtonMethod(
-        shiftedQuadratic,
-        shiftedQuadraticGrad,
-        shiftedQuadraticHess,
-        [x0, y0],
-      ),
-    [x0, y0],
+    () => dampedNewtonMethod(objective, gradient, hessian, [x0, y0]),
+    [objective, gradient, hessian, x0, y0],
   );
   return (
     <Section
@@ -227,7 +214,7 @@ function DampedNewtonDemo() {
           setY0(b);
         }}
       />
-      <ContourPathChart objective={shiftedQuadratic} path={result.path} />
+      <ContourPathChart objective={objective} path={result.path} />
       <OptimizationStepTable
         steps={result.steps}
         caption="Damped Newton step-by-step iterations"
@@ -238,11 +225,12 @@ function DampedNewtonDemo() {
 }
 
 function ConjugateGradientDemo() {
+  const { objective, gradient } = useShiftedQuadraticProblem();
   const [x0, setX0] = useState(0);
   const [y0, setY0] = useState(0);
   const result = useMemo(
-    () => conjugateGradient(shiftedQuadratic, shiftedQuadraticGrad, [x0, y0]),
-    [x0, y0],
+    () => conjugateGradient(objective, gradient, [x0, y0]),
+    [objective, gradient, x0, y0],
   );
   return (
     <Section
@@ -273,7 +261,7 @@ function ConjugateGradientDemo() {
           setY0(b);
         }}
       />
-      <ContourPathChart objective={shiftedQuadratic} path={result.path} />
+      <ContourPathChart objective={objective} path={result.path} />
       <OptimizationStepTable
         steps={result.steps}
         caption="Conjugate gradient step-by-step iterations"
@@ -284,11 +272,12 @@ function ConjugateGradientDemo() {
 }
 
 function BfgsDemo() {
+  const { objective, gradient } = useShiftedQuadraticProblem();
   const [x0, setX0] = useState(0);
   const [y0, setY0] = useState(0);
   const result = useMemo(
-    () => bfgs(shiftedQuadratic, shiftedQuadraticGrad, [x0, y0]),
-    [x0, y0],
+    () => bfgs(objective, gradient, [x0, y0]),
+    [objective, gradient, x0, y0],
   );
   return (
     <Section
@@ -321,7 +310,7 @@ function BfgsDemo() {
           setY0(b);
         }}
       />
-      <ContourPathChart objective={shiftedQuadratic} path={result.path} />
+      <ContourPathChart objective={objective} path={result.path} />
       <OptimizationStepTable
         steps={result.steps}
         caption="BFGS step-by-step iterations"
@@ -332,11 +321,12 @@ function BfgsDemo() {
 }
 
 function LBfgsDemo() {
+  const { objective, gradient } = useShiftedQuadraticProblem();
   const [x0, setX0] = useState(0);
   const [y0, setY0] = useState(0);
   const result = useMemo(
-    () => lbfgs(shiftedQuadratic, shiftedQuadraticGrad, [x0, y0]),
-    [x0, y0],
+    () => lbfgs(objective, gradient, [x0, y0]),
+    [objective, gradient, x0, y0],
   );
   return (
     <Section
@@ -365,7 +355,7 @@ function LBfgsDemo() {
           setY0(b);
         }}
       />
-      <ContourPathChart objective={shiftedQuadratic} path={result.path} />
+      <ContourPathChart objective={objective} path={result.path} />
       <OptimizationStepTable
         steps={result.steps}
         caption="L-BFGS step-by-step iterations"
@@ -376,11 +366,12 @@ function LBfgsDemo() {
 }
 
 function QuasiNewtonDemo() {
+  const { objective, gradient } = useShiftedQuadraticProblem();
   const [x0, setX0] = useState(2);
   const [y0, setY0] = useState(2);
   const result = useMemo(
-    () => quasiNewtonBfgs(shiftedQuadratic, shiftedQuadraticGrad, [x0, y0]),
-    [x0, y0],
+    () => quasiNewtonBfgs(objective, gradient, [x0, y0]),
+    [objective, gradient, x0, y0],
   );
   return (
     <Section
@@ -409,7 +400,7 @@ function QuasiNewtonDemo() {
           setY0(b);
         }}
       />
-      <ContourPathChart objective={shiftedQuadratic} path={result.path} />
+      <ContourPathChart objective={objective} path={result.path} />
       <OptimizationStepTable
         steps={result.steps}
         caption="Quasi-Newton (BFGS) step-by-step iterations"
@@ -431,16 +422,13 @@ function LeastSquaresSliders({
   return <QuadraticStartSliders x0={x0} y0={y0} onChange={onChange} />;
 }
 
-function rosenbrockObjective(x: Vec): number {
-  return leastSquaresValue(rosenbrockResidual, x);
-}
-
 function GaussNewtonDemo() {
+  const { residual, jacobian, objective } = useRosenbrockLeastSquares();
   const [x0, setX0] = useState(0);
   const [y0, setY0] = useState(0);
   const result = useMemo(
-    () => gaussNewton(rosenbrockResidual, rosenbrockJacobian, [x0, y0]),
-    [x0, y0],
+    () => gaussNewton(residual, jacobian, [x0, y0]),
+    [residual, jacobian, x0, y0],
   );
   return (
     <Section
@@ -460,7 +448,7 @@ function GaussNewtonDemo() {
         }}
       />
       <ContourPathChart
-        objective={rosenbrockObjective}
+        objective={objective}
         path={result.path}
         xRange={[-1, 2]}
         yRange={[-1, 2]}
@@ -475,11 +463,12 @@ function GaussNewtonDemo() {
 }
 
 function LevenbergMarquardtDemo() {
+  const { residual, jacobian, objective } = useRosenbrockLeastSquares();
   const [x0, setX0] = useState(0);
   const [y0, setY0] = useState(0);
   const result = useMemo(
-    () => levenbergMarquardt(rosenbrockResidual, rosenbrockJacobian, [x0, y0]),
-    [x0, y0],
+    () => levenbergMarquardt(residual, jacobian, [x0, y0]),
+    [residual, jacobian, x0, y0],
   );
   return (
     <Section
@@ -499,7 +488,7 @@ function LevenbergMarquardtDemo() {
         }}
       />
       <ContourPathChart
-        objective={rosenbrockObjective}
+        objective={objective}
         path={result.path}
         xRange={[-1, 2]}
         yRange={[-1, 2]}
@@ -711,6 +700,7 @@ export type SecondOrderPageId = (typeof SECOND_ORDER_PAGES)[number]["id"];
 function ConceptIntro() {
   return (
     <div className="mb-6 space-y-4">
+      <DemoNoiseControls />
       <EquationWithWhere
         where={[
           WHERE_X0,
@@ -746,7 +736,7 @@ function ConceptIntro() {
   );
 }
 
-export function SecondOrderConcepts({
+function SecondOrderConceptsContent({
   initialPageId = "newton",
 }: {
   initialPageId?: SecondOrderPageId;
@@ -782,5 +772,15 @@ export function SecondOrderConcepts({
         )}
       </div>
     </div>
+  );
+}
+
+export function SecondOrderConcepts(
+  props: { initialPageId?: SecondOrderPageId } = {},
+) {
+  return (
+    <DemoNoiseProvider>
+      <SecondOrderConceptsContent {...props} />
+    </DemoNoiseProvider>
   );
 }

@@ -149,6 +149,23 @@ def test_app_renders_latex_equations_for_line_search() -> None:
     assert (APP_ROOT / "src" / "components" / "MathBlock.tsx").is_file()
 
 
+def test_second_order_pages_include_where_explanations() -> None:
+    concepts = (APP_ROOT / "src" / "components" / "SecondOrderConcepts.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "EquationWithWhere" in concepts
+    assert (APP_ROOT / "src" / "components" / "EquationWithWhere.tsx").is_file()
+
+
+def test_second_order_pages_include_step_by_step_tables() -> None:
+    concepts = (APP_ROOT / "src" / "components" / "SecondOrderConcepts.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "OptimizationStepTable" in concepts
+    assert concepts.count("OptimizationStepTable") >= 8
+    assert "steps" in (APP_ROOT / "src" / "secondOrder.ts").read_text(encoding="utf-8")
+
+
 def test_app_includes_interactive_second_order_demos() -> None:
     concepts = (APP_ROOT / "src" / "components" / "SecondOrderConcepts.tsx").read_text(
         encoding="utf-8"

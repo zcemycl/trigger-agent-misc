@@ -20,27 +20,59 @@ import {
   shiftedQuadraticHess,
 } from "../secondOrderProblems";
 import { ContourPathChart } from "./ContourPathChart";
+import { EquationWithWhere, type WhereClause } from "./EquationWithWhere";
 import { MathBlock } from "./MathBlock";
+import { OptimizationStepTable } from "./OptimizationStepTable";
+
+const WHERE_X_K: WhereClause = {
+  tex: "\\mathbf{x}_k",
+  description: "parameter vector before the update at step k",
+};
+const WHERE_X0: WhereClause = {
+  tex: "\\mathbf{x}_0",
+  description: "starting point (sliders x₁, x₂)",
+};
+const WHERE_GRAD_F: WhereClause = {
+  tex: "\\nabla f(\\mathbf{x}_k)",
+  description: "gradient of the demo objective f",
+};
+const WHERE_HESS: WhereClause = {
+  tex: "\\mathbf{H}(\\mathbf{x}_k)",
+  description: "Hessian of f (exact in Newton demos)",
+};
+const WHERE_ALPHA: WhereClause = {
+  tex: "\\alpha_k",
+  description: "Armijo backtracking step length along the search direction",
+};
+const WHERE_R: WhereClause = {
+  tex: "\\mathbf{r}(\\mathbf{x})",
+  description: "residual vector in the Rosenbrock least-squares demo",
+};
+const WHERE_J: WhereClause = {
+  tex: "\\mathbf{J}(\\mathbf{x})",
+  description: "Jacobian ∂r/∂x",
+};
+const WHERE_LAM: WhereClause = {
+  tex: "\\lambda",
+  description: "Levenberg–Marquardt damping on the diagonal of JᵀJ",
+};
 
 function Section({
   title,
-  description,
   equations,
   children,
 }: {
   title: string;
-  description: string;
   equations?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-6">
       <h2 className="text-lg font-medium text-white">{title}</h2>
-      <p className="mt-2 text-sm leading-relaxed text-slate-400">
-        {description}
-      </p>
       {equations ? <div className="mt-4 space-y-3">{equations}</div> : null}
-      <div className="mt-5 space-y-4">{children}</div>
+      <div className={`space-y-4 ${equations ? "mt-5" : "mt-4"}`}>
+        {children}
+      </div>
     </section>
   );
 }
@@ -122,9 +154,10 @@ function NewtonDemo() {
   return (
     <Section
       title="Newton's method"
-      description="Full Newton steps using the exact Hessian. On this quadratic, one step reaches the minimizer from any start."
       equations={
-        <MathBlock tex="\mathbf{x}_{k+1} = \mathbf{x}_k - \mathbf{H}(\mathbf{x}_k)^{-1}\nabla f(\mathbf{x}_k)" />
+        <EquationWithWhere where={[WHERE_X_K, WHERE_HESS, WHERE_GRAD_F]}>
+          <MathBlock tex="\mathbf{x}_{k+1} = \mathbf{x}_k - \mathbf{H}(\mathbf{x}_k)^{-1}\nabla f(\mathbf{x}_k)" />
+        </EquationWithWhere>
       }
     >
       <QuadraticStartSliders
@@ -135,8 +168,12 @@ function NewtonDemo() {
           setY0(b);
         }}
       />
-      <ResultPanel result={result} />
       <ContourPathChart objective={shiftedQuadratic} path={result.path} />
+      <OptimizationStepTable
+        steps={result.steps}
+        caption="Newton's method step-by-step iterations"
+      />
+      <ResultPanel result={result} />
     </Section>
   );
 }
@@ -157,9 +194,21 @@ function DampedNewtonDemo() {
   return (
     <Section
       title="Damped Newton method"
-      description="Newton direction with backtracking Armijo line search when a full step is too aggressive."
       equations={
-        <MathBlock tex="\mathbf{x}_{k+1} = \mathbf{x}_k + \alpha_k \mathbf{d}_k,\quad \mathbf{d}_k = -\mathbf{H}_k^{-1}\nabla f_k" />
+        <EquationWithWhere
+          where={[
+            WHERE_X_K,
+            WHERE_ALPHA,
+            {
+              tex: "\\mathbf{d}_k",
+              description: "Newton direction −H_k⁻¹∇f_k",
+            },
+            WHERE_HESS,
+            WHERE_GRAD_F,
+          ]}
+        >
+          <MathBlock tex="\mathbf{x}_{k+1} = \mathbf{x}_k + \alpha_k \mathbf{d}_k,\quad \mathbf{d}_k = -\mathbf{H}_k^{-1}\nabla f_k" />
+        </EquationWithWhere>
       }
     >
       <QuadraticStartSliders
@@ -170,8 +219,12 @@ function DampedNewtonDemo() {
           setY0(b);
         }}
       />
-      <ResultPanel result={result} />
       <ContourPathChart objective={shiftedQuadratic} path={result.path} />
+      <OptimizationStepTable
+        steps={result.steps}
+        caption="Damped Newton step-by-step iterations"
+      />
+      <ResultPanel result={result} />
     </Section>
   );
 }
@@ -186,9 +239,22 @@ function ConjugateGradientDemo() {
   return (
     <Section
       title="Conjugate gradient"
-      description="Fletcher–Reeves nonlinear CG with Armijo line search along conjugate directions."
       equations={
-        <MathBlock tex="\mathbf{d}_{k+1} = -\nabla f_{k+1} + \beta_k \mathbf{d}_k,\quad \beta_k^{\mathrm{FR}} = \frac{\|\nabla f_{k+1}\|^2}{\|\nabla f_k\|^2}" />
+        <EquationWithWhere
+          where={[
+            WHERE_X_K,
+            WHERE_ALPHA,
+            WHERE_GRAD_F,
+            {
+              tex: "\\beta_k",
+              description:
+                "Fletcher–Reeves coefficient from successive gradients",
+            },
+            { tex: "\\mathbf{d}_k", description: "conjugate search direction" },
+          ]}
+        >
+          <MathBlock tex="\mathbf{d}_{k+1} = -\nabla f_{k+1} + \beta_k \mathbf{d}_k,\quad \beta_k^{\mathrm{FR}} = \frac{\|\nabla f_{k+1}\|^2}{\|\nabla f_k\|^2}" />
+        </EquationWithWhere>
       }
     >
       <QuadraticStartSliders
@@ -199,8 +265,12 @@ function ConjugateGradientDemo() {
           setY0(b);
         }}
       />
-      <ResultPanel result={result} />
       <ContourPathChart objective={shiftedQuadratic} path={result.path} />
+      <OptimizationStepTable
+        steps={result.steps}
+        caption="Conjugate gradient step-by-step iterations"
+      />
+      <ResultPanel result={result} />
     </Section>
   );
 }
@@ -215,9 +285,24 @@ function BfgsDemo() {
   return (
     <Section
       title="BFGS"
-      description="Quasi-Newton BFGS builds an inverse Hessian approximation from gradient differences."
       equations={
-        <MathBlock tex="\mathbf{B}_{k+1} = (\mathbf{I}-\rho_k \mathbf{s}_k \mathbf{y}_k^\top)\mathbf{B}_k(\mathbf{I}-\rho_k \mathbf{y}_k \mathbf{s}_k^\top)+\rho_k \mathbf{s}_k \mathbf{s}_k^\top" />
+        <EquationWithWhere
+          where={[
+            WHERE_X_K,
+            WHERE_ALPHA,
+            WHERE_GRAD_F,
+            {
+              tex: "\\mathbf{B}_k",
+              description: "inverse Hessian approximation updated each step",
+            },
+            {
+              tex: "\\mathbf{s}_k, \\mathbf{y}_k",
+              description: "step and gradient difference for the BFGS update",
+            },
+          ]}
+        >
+          <MathBlock tex="\mathbf{B}_{k+1} = (\mathbf{I}-\rho_k \mathbf{s}_k \mathbf{y}_k^\top)\mathbf{B}_k(\mathbf{I}-\rho_k \mathbf{y}_k \mathbf{s}_k^\top)+\rho_k \mathbf{s}_k \mathbf{s}_k^\top" />
+        </EquationWithWhere>
       }
     >
       <QuadraticStartSliders
@@ -228,8 +313,12 @@ function BfgsDemo() {
           setY0(b);
         }}
       />
-      <ResultPanel result={result} />
       <ContourPathChart objective={shiftedQuadratic} path={result.path} />
+      <OptimizationStepTable
+        steps={result.steps}
+        caption="BFGS step-by-step iterations"
+      />
+      <ResultPanel result={result} />
     </Section>
   );
 }
@@ -244,9 +333,20 @@ function LBfgsDemo() {
   return (
     <Section
       title="L-BFGS"
-      description="Limited-memory BFGS stores only recent (s, y) pairs and applies the two-loop recursion."
       equations={
-        <MathBlock tex="\mathbf{H}_k \approx \mathbf{H}_0 + \sum_{i=k-m}^{k-1} \cdots \quad \text{(two-loop recursion)}" />
+        <EquationWithWhere
+          where={[
+            WHERE_X_K,
+            WHERE_ALPHA,
+            WHERE_GRAD_F,
+            {
+              tex: "m",
+              description: "memory window of stored (s, y) pairs (default 10)",
+            },
+          ]}
+        >
+          <MathBlock tex="\mathbf{H}_k \approx \mathbf{H}_0 + \sum_{i=k-m}^{k-1} \cdots \quad \text{(two-loop recursion)}" />
+        </EquationWithWhere>
       }
     >
       <QuadraticStartSliders
@@ -257,8 +357,12 @@ function LBfgsDemo() {
           setY0(b);
         }}
       />
-      <ResultPanel result={result} />
       <ContourPathChart objective={shiftedQuadratic} path={result.path} />
+      <OptimizationStepTable
+        steps={result.steps}
+        caption="L-BFGS step-by-step iterations"
+      />
+      <ResultPanel result={result} />
     </Section>
   );
 }
@@ -273,9 +377,20 @@ function QuasiNewtonDemo() {
   return (
     <Section
       title="Quasi-Newton methods"
-      description="BFGS is the canonical quasi-Newton update; this demo calls the same BFGS implementation via the quasi-Newton alias."
       equations={
-        <MathBlock tex="\mathbf{x}_{k+1} = \mathbf{x}_k + \alpha_k \mathbf{p}_k,\quad \mathbf{p}_k = -\mathbf{B}_k \nabla f_k" />
+        <EquationWithWhere
+          where={[
+            WHERE_X_K,
+            WHERE_ALPHA,
+            WHERE_GRAD_F,
+            {
+              tex: "\\mathbf{p}_k",
+              description: "quasi-Newton search direction −B_k∇f_k (BFGS demo)",
+            },
+          ]}
+        >
+          <MathBlock tex="\mathbf{x}_{k+1} = \mathbf{x}_k + \alpha_k \mathbf{p}_k,\quad \mathbf{p}_k = -\mathbf{B}_k \nabla f_k" />
+        </EquationWithWhere>
       }
     >
       <QuadraticStartSliders
@@ -286,8 +401,12 @@ function QuasiNewtonDemo() {
           setY0(b);
         }}
       />
-      <ResultPanel result={result} />
       <ContourPathChart objective={shiftedQuadratic} path={result.path} />
+      <OptimizationStepTable
+        steps={result.steps}
+        caption="Quasi-Newton (BFGS) step-by-step iterations"
+      />
+      <ResultPanel result={result} />
     </Section>
   );
 }
@@ -318,9 +437,10 @@ function GaussNewtonDemo() {
   return (
     <Section
       title="Gauss–Newton"
-      description="For least squares, approximates the Hessian with JᵀJ and linearizes the model each step."
       equations={
-        <MathBlock tex="\min_{\mathbf{x}} \tfrac12 \|\mathbf{r}(\mathbf{x})\|^2,\quad \Delta \mathbf{x} = -(\mathbf{J}^\top \mathbf{J})^{-1}\mathbf{J}^\top \mathbf{r}" />
+        <EquationWithWhere where={[WHERE_X_K, WHERE_R, WHERE_J]}>
+          <MathBlock tex="\min_{\mathbf{x}} \tfrac12 \|\mathbf{r}(\mathbf{x})\|^2,\quad \Delta \mathbf{x} = -(\mathbf{J}^\top \mathbf{J})^{-1}\mathbf{J}^\top \mathbf{r}" />
+        </EquationWithWhere>
       }
     >
       <LeastSquaresSliders
@@ -331,13 +451,17 @@ function GaussNewtonDemo() {
           setY0(b);
         }}
       />
-      <ResultPanel result={result} />
       <ContourPathChart
         objective={rosenbrockObjective}
         path={result.path}
         xRange={[-1, 2]}
         yRange={[-1, 2]}
       />
+      <OptimizationStepTable
+        steps={result.steps}
+        caption="Gauss–Newton step-by-step iterations"
+      />
+      <ResultPanel result={result} />
     </Section>
   );
 }
@@ -352,9 +476,10 @@ function LevenbergMarquardtDemo() {
   return (
     <Section
       title="Levenberg–Marquardt"
-      description="Damps Gauss–Newton with λ on the diagonal of JᵀJ, adapting λ when trial steps reduce the residual."
       equations={
-        <MathBlock tex="(\mathbf{J}^\top \mathbf{J} + \lambda \mathbf{I})\,\Delta \mathbf{x} = -\mathbf{J}^\top \mathbf{r}" />
+        <EquationWithWhere where={[WHERE_X_K, WHERE_R, WHERE_J, WHERE_LAM]}>
+          <MathBlock tex="(\mathbf{J}^\top \mathbf{J} + \lambda \mathbf{I})\,\Delta \mathbf{x} = -\mathbf{J}^\top \mathbf{r}" />
+        </EquationWithWhere>
       }
     >
       <LeastSquaresSliders
@@ -365,13 +490,17 @@ function LevenbergMarquardtDemo() {
           setY0(b);
         }}
       />
-      <ResultPanel result={result} />
       <ContourPathChart
         objective={rosenbrockObjective}
         path={result.path}
         xRange={[-1, 2]}
         yRange={[-1, 2]}
       />
+      <OptimizationStepTable
+        steps={result.steps}
+        caption="Levenberg–Marquardt step-by-step iterations"
+      />
+      <ResultPanel result={result} />
     </Section>
   );
 }
@@ -401,15 +530,38 @@ export type SecondOrderPageId = (typeof SECOND_ORDER_PAGES)[number]["id"];
 
 function ConceptIntro() {
   return (
-    <div className="mb-6 space-y-3 text-slate-400">
-      <p className="text-sm leading-relaxed">
-        Demos mirror{" "}
-        <code className="rounded bg-slate-800 px-1.5 py-0.5 text-emerald-300">
-          trigger_agent_misc.optimization.second_order
-        </code>{" "}
-        on a shifted quadratic (min at (1, 2)) and Rosenbrock least squares.
-      </p>
-      <MathBlock tex="f(\mathbf{x}) = \tfrac12\bigl((x_1-1)^2 + (x_2-2)^2\bigr)" />
+    <div className="mb-6 space-y-4">
+      <EquationWithWhere
+        where={[
+          WHERE_X0,
+          {
+            tex: "f(\\mathbf{x})",
+            description:
+              "smooth objective for Newton, CG, and quasi-Newton demos",
+          },
+          {
+            tex: "(1, 2)",
+            description: "unique minimizer of the shifted quadratic",
+          },
+        ]}
+      >
+        <MathBlock tex="f(\mathbf{x}) = \tfrac12\bigl((x_1-1)^2 + (x_2-2)^2\bigr)" />
+      </EquationWithWhere>
+      <EquationWithWhere
+        where={[
+          WHERE_X0,
+          WHERE_R,
+          WHERE_J,
+          {
+            tex: "\\tfrac12\\|\\mathbf{r}\\|^2",
+            description:
+              "nonlinear least-squares objective for Gauss–Newton and LM",
+          },
+        ]}
+      >
+        <MathBlock tex="\min_{\mathbf{x}} \tfrac12 \|\mathbf{r}(\mathbf{x})\|^2" />
+        <MathBlock tex="\mathbf{r}(\mathbf{x}) = \begin{pmatrix}x_1-1\\10(x_2-x_1^2)\end{pmatrix}" />
+      </EquationWithWhere>
     </div>
   );
 }

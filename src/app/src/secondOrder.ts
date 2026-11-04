@@ -10,12 +10,45 @@ export type Hessian = (x: Vec) => Mat;
 export type Residual = (x: Vec) => Vec;
 export type Jacobian = (x: Vec) => Mat;
 
+export interface SecondOrderIterationStep {
+  iteration: number;
+  x: Vec;
+  delta: Vec;
+  xNext: Vec;
+  objective: number;
+  detail: string;
+}
+
 export interface OptimizeResult {
   x: Vec;
   value: number;
   iterations: number;
   converged: boolean;
   path: Vec[];
+  steps: SecondOrderIterationStep[];
+}
+
+export function formatVector(v: Vec, digits = 4): string {
+  const inner = v.map((c) => c.toFixed(digits)).join(", ");
+  return `[${inner}]`;
+}
+
+function pushStep(
+  steps: SecondOrderIterationStep[],
+  iteration: number,
+  x: Vec,
+  delta: Vec,
+  objectiveValue: number,
+  detail: string,
+): void {
+  steps.push({
+    iteration,
+    x: x.slice(),
+    delta: delta.slice(),
+    xNext: vecAdd(x, delta).slice(),
+    objective: objectiveValue,
+    detail,
+  });
 }
 
 export function vecAdd(a: Vec, b: Vec): Vec {
@@ -149,6 +182,7 @@ export function newtonsMethod(
   const maxIter = options.maxIter ?? 100;
   let x = [...x0];
   const path: Vec[] = [x];
+  const steps: SecondOrderIterationStep[] = [];
   let iterations = 0;
   let xPrev: Vec | null = null;
 
@@ -161,10 +195,21 @@ export function newtonsMethod(
         iterations,
         converged: true,
         path,
+        steps,
       };
     }
     try {
       const step = vecScale(solveLinear(hessian(x), g), -1);
+      pushStep(
+        steps,
+        iterations,
+        x,
+        step,
+        objective(x),
+        `∇f(x_k) = ${formatVector(g)}; Δx_k = −H(x_k)⁻¹∇f(x_k) = ${formatVector(
+          step,
+        )}`,
+      );
       xPrev = x;
       x = vecAdd(x, step);
       path.push([...x]);
@@ -175,6 +220,7 @@ export function newtonsMethod(
         iterations,
         converged: false,
         path,
+        steps,
       };
     }
     iterations += 1;
@@ -186,6 +232,7 @@ export function newtonsMethod(
     iterations,
     converged: norm2(g) <= gradTol,
     path,
+    steps,
   };
 }
 
@@ -211,6 +258,7 @@ export function dampedNewtonMethod(
   const rho = options.rho ?? 0.5;
   let x = [...x0];
   const path: Vec[] = [x];
+  const steps: SecondOrderIterationStep[] = [];
   let fx = objective(x);
   let iterations = 0;
   let xPrev: Vec | null = null;
@@ -218,17 +266,28 @@ export function dampedNewtonMethod(
   while (iterations < maxIter) {
     const g = gradient(x);
     if (checkConvergence(g, gradTol, x, xPrev, xTol)) {
-      return { x, value: fx, iterations, converged: true, path };
+      return { x, value: fx, iterations, converged: true, path, steps };
     }
     let direction: Vec;
     try {
       direction = vecScale(solveLinear(hessian(x), g), -1);
     } catch {
-      return { x, value: fx, iterations, converged: false, path };
+      return { x, value: fx, iterations, converged: false, path, steps };
     }
     const alpha = armijoStep(objective, x, direction, g, alpha0, c1, rho);
+    const delta = vecScale(direction, alpha);
+    pushStep(
+      steps,
+      iterations,
+      x,
+      delta,
+      fx,
+      `d_k = −H_k⁻¹∇f_k; α_k = ${alpha.toFixed(
+        4,
+      )} (Armijo); Δx_k = α_k d_k = ${formatVector(delta)}`,
+    );
     xPrev = x;
-    x = vecAdd(x, vecScale(direction, alpha));
+    x = vecAdd(x, delta);
     path.push([...x]);
     fx = objective(x);
     iterations += 1;
@@ -239,6 +298,7 @@ export function dampedNewtonMethod(
     iterations,
     converged: norm2(gradient(x)) <= gradTol,
     path,
+    steps,
   };
 }
 
@@ -263,6 +323,7 @@ export function conjugateGradient(
   const restartEvery = options.restartEvery ?? x0.length;
   let x = [...x0];
   const path: Vec[] = [x];
+  const steps: SecondOrderIterationStep[] = [];
   let g = gradient(x);
   let direction = vecScale(g, -1);
   let fx = objective(x);
@@ -270,16 +331,27 @@ export function conjugateGradient(
 
   while (iterations < maxIter) {
     if (norm2(g) <= gradTol) {
-      return { x, value: fx, iterations, converged: true, path };
+      return { x, value: fx, iterations, converged: true, path, steps };
     }
     const alpha = armijoStep(objective, x, direction, g, alpha0, c1, rho);
-    x = vecAdd(x, vecScale(direction, alpha));
+    const delta = vecScale(direction, alpha);
+    pushStep(
+      steps,
+      iterations,
+      x,
+      delta,
+      fx,
+      `d_k search direction; α_k = ${alpha.toFixed(4)}; Δx_k = ${formatVector(
+        delta,
+      )}`,
+    );
+    x = vecAdd(x, delta);
     path.push([...x]);
     const gNew = gradient(x);
     fx = objective(x);
     iterations += 1;
     if (norm2(gNew) <= gradTol) {
-      return { x, value: fx, iterations, converged: true, path };
+      return { x, value: fx, iterations, converged: true, path, steps };
     }
     if (iterations % restartEvery === 0) {
       direction = vecScale(gNew, -1);
@@ -295,6 +367,7 @@ export function conjugateGradient(
     iterations,
     converged: norm2(g) <= gradTol,
     path,
+    steps,
   };
 }
 
@@ -317,6 +390,7 @@ export function bfgs(
   const rho = options.rho ?? 0.5;
   let x = [...x0];
   const path: Vec[] = [x];
+  const steps: SecondOrderIterationStep[] = [];
   const n = x.length;
   let g = gradient(x);
   let b: Mat = identity(n);
@@ -325,11 +399,21 @@ export function bfgs(
 
   while (iterations < maxIter) {
     if (norm2(g) <= gradTol) {
-      return { x, value: fx, iterations, converged: true, path };
+      return { x, value: fx, iterations, converged: true, path, steps };
     }
     let direction = matVec(b, vecScale(g, -1));
     const alpha = armijoStep(objective, x, direction, g, alpha0, c1, rho);
     const s = vecScale(direction, alpha);
+    pushStep(
+      steps,
+      iterations,
+      x,
+      s,
+      fx,
+      `p_k = −B_k∇f_k; α_k = ${alpha.toFixed(
+        4,
+      )}; s_k = α_k p_k = ${formatVector(s)}`,
+    );
     const xNew = vecAdd(x, s);
     const gNew = gradient(xNew);
     const y = vecSub(gNew, g);
@@ -358,6 +442,7 @@ export function bfgs(
     iterations,
     converged: norm2(g) <= gradTol,
     path,
+    steps,
   };
 }
 
@@ -419,6 +504,7 @@ export function lbfgs(
   const rho = options.rho ?? 0.5;
   let x = [...x0];
   const path: Vec[] = [x];
+  const steps: SecondOrderIterationStep[] = [];
   let g = gradient(x);
   let fx = objective(x);
   const sHist: Vec[] = [];
@@ -428,11 +514,21 @@ export function lbfgs(
 
   while (iterations < maxIter) {
     if (norm2(g) <= gradTol) {
-      return { x, value: fx, iterations, converged: true, path };
+      return { x, value: fx, iterations, converged: true, path, steps };
     }
     const direction = lbfgsDirection(g, sHist, yHist, rhoHist);
     const alpha = armijoStep(objective, x, direction, g, alpha0, c1, rho);
     const s = vecScale(direction, alpha);
+    pushStep(
+      steps,
+      iterations,
+      x,
+      s,
+      fx,
+      `L-BFGS two-loop direction; α_k = ${alpha.toFixed(
+        4,
+      )}; s_k = ${formatVector(s)}`,
+    );
     const xNew = vecAdd(x, s);
     const gNew = gradient(xNew);
     const y = vecSub(gNew, g);
@@ -459,6 +555,7 @@ export function lbfgs(
     iterations,
     converged: norm2(g) <= gradTol,
     path,
+    steps,
   };
 }
 
@@ -477,6 +574,7 @@ export function gaussNewton(
   const damping = options.damping ?? 1e-8;
   let x = [...x0];
   const path: Vec[] = [x];
+  const steps: SecondOrderIterationStep[] = [];
   let iterations = 0;
 
   while (iterations < maxIter) {
@@ -485,26 +583,37 @@ export function gaussNewton(
     const jt = matTranspose(j);
     const jtj = matAdd(matMul(jt, j), matScale(identity(x.length), damping));
     const g = matVec(jt, r);
+    const fx = 0.5 * dot(r, r);
     if (norm2(g) <= gradTol) {
       return {
         x,
-        value: 0.5 * dot(r, r),
+        value: fx,
         iterations,
         converged: true,
         path,
+        steps,
       };
     }
     try {
       const step = vecScale(solveLinear(jtj, g), -1);
+      pushStep(
+        steps,
+        iterations,
+        x,
+        step,
+        fx,
+        `Δx_k = −(JᵀJ)⁻¹Jᵀr = ${formatVector(step)}`,
+      );
       x = vecAdd(x, step);
       path.push([...x]);
     } catch {
       return {
         x,
-        value: 0.5 * dot(r, r),
+        value: fx,
         iterations,
         converged: false,
         path,
+        steps,
       };
     }
     iterations += 1;
@@ -517,6 +626,7 @@ export function gaussNewton(
     iterations,
     converged: norm2(g) <= gradTol,
     path,
+    steps,
   };
 }
 
@@ -539,6 +649,7 @@ export function levenbergMarquardt(
   const lambdaDown = options.lambdaDown ?? 0.1;
   let x = [...x0];
   const path: Vec[] = [x];
+  const steps: SecondOrderIterationStep[] = [];
   let fx = 0.5 * dot(residual(x), residual(x));
   let iterations = 0;
 
@@ -548,7 +659,7 @@ export function levenbergMarquardt(
     const jt = matTranspose(j);
     const g = matVec(jt, r);
     if (norm2(g) <= gradTol) {
-      return { x, value: fx, iterations, converged: true, path };
+      return { x, value: fx, iterations, converged: true, path, steps };
     }
     const jtj = matMul(jt, j);
     let accepted = false;
@@ -559,6 +670,14 @@ export function levenbergMarquardt(
         const xTrial = vecAdd(x, step);
         const fTrial = 0.5 * dot(residual(xTrial), residual(xTrial));
         if (fTrial < fx) {
+          pushStep(
+            steps,
+            iterations,
+            x,
+            step,
+            fx,
+            `λ = ${lam.toExponential(2)}; Δx_k = ${formatVector(step)}`,
+          );
           x = xTrial;
           path.push([...x]);
           fx = fTrial;
@@ -572,7 +691,7 @@ export function levenbergMarquardt(
       }
     }
     if (!accepted) {
-      return { x, value: fx, iterations, converged: false, path };
+      return { x, value: fx, iterations, converged: false, path, steps };
     }
     iterations += 1;
   }
@@ -583,5 +702,6 @@ export function levenbergMarquardt(
     iterations,
     converged: norm2(g) <= gradTol,
     path,
+    steps,
   };
 }

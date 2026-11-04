@@ -30,6 +30,7 @@ import {
   rosenbrockJacobian,
   rosenbrockResidual,
   shiftedQuadratic,
+  shiftedQuadratic3D,
   shiftedQuadraticGrad,
   shiftedQuadraticHess,
 } from "../secondOrderProblems";
@@ -125,6 +126,18 @@ export function useShiftedQuadraticProblem() {
       objective: wrapObjectiveVec(shiftedQuadratic, noise),
       gradient: wrapGradientVec(shiftedQuadraticGrad, noise),
       hessian: shiftedQuadraticHess,
+    }),
+    [noise.enabled, noise.seed],
+  );
+}
+
+export function useShiftedQuadratic3DProblem() {
+  const noise = useDemoNoise();
+  return useMemo(
+    () => ({
+      objective: wrapObjectiveVec(shiftedQuadratic3D.objective, noise),
+      gradient: wrapGradientVec(shiftedQuadratic3D.gradient, noise),
+      hessian: shiftedQuadratic3D.hessian,
     }),
     [noise.enabled, noise.seed],
   );

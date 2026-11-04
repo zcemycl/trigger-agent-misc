@@ -18,13 +18,15 @@ import {
   DemoNoiseControls,
   DemoNoiseProvider,
   useRosenbrockLeastSquares,
+  useShiftedQuadratic3DProblem,
   useShiftedQuadraticProblem,
 } from "./DemoNoise";
 import {
   ConceptPageOverview,
   type ConceptOverview,
 } from "./ConceptPageOverview";
-import { ContourPathChart } from "./ContourPathChart";
+import { ObjectiveLandscapeView } from "./ObjectiveLandscapeView";
+import { Path3DChart } from "./Path3DChart";
 import { EquationWithWhere, type WhereClause } from "./EquationWithWhere";
 import { MathBlock } from "./MathBlock";
 import { OptimizationStepTable } from "./OptimizationStepTable";
@@ -92,9 +94,9 @@ function ResultPanel({ result }: { result: OptimizeResult }) {
         <span className="text-slate-500">Converged:</span>{" "}
         {result.converged ? "yes" : "no"}
       </p>
-      <p>
-        <span className="text-slate-500">x:</span> ({result.x[0]!.toFixed(4)},{" "}
-        {result.x[1]!.toFixed(4)})
+      <p className="sm:col-span-2">
+        <span className="text-slate-500">x:</span> (
+        {result.x.map((xi) => xi.toFixed(4)).join(", ")})
       </p>
       <p>
         <span className="text-slate-500">f(x):</span>{" "}
@@ -143,14 +145,94 @@ function QuadraticStartSliders({
   );
 }
 
-function NewtonDemo() {
-  const { objective, gradient, hessian } = useShiftedQuadraticProblem();
-  const [x0, setX0] = useState(0);
-  const [y0, setY0] = useState(0);
-  const result = useMemo(
-    () => newtonsMethod(objective, gradient, hessian, [x0, y0]),
-    [objective, gradient, hessian, x0, y0],
+function QuadraticStartSliders3D({
+  values,
+  onChange,
+}: {
+  values: [number, number, number];
+  onChange: (next: [number, number, number]) => void;
+}) {
+  const labels = ["x₁", "x₂", "x₃"] as const;
+  return (
+    <div className="flex flex-col gap-3">
+      {labels.map((label, i) => (
+        <label
+          key={label}
+          className="flex flex-col gap-1 text-sm text-slate-300"
+        >
+          Start {label} = {values[i]!.toFixed(2)}
+          <input
+            type="range"
+            min={-1}
+            max={4}
+            step={0.1}
+            value={values[i]}
+            onChange={(e) => {
+              const next = [...values] as [number, number, number];
+              next[i] = Number(e.target.value);
+              onChange(next);
+            }}
+            className="accent-emerald-500"
+          />
+        </label>
+      ))}
+    </div>
   );
+}
+
+function ProblemDimensionToggle({
+  value,
+  onChange,
+}: {
+  value: 2 | 3;
+  onChange: (d: 2 | 3) => void;
+}) {
+  return (
+    <div
+      className="inline-flex rounded-lg border border-slate-800 p-0.5 text-sm"
+      role="group"
+      aria-label="Problem dimension"
+    >
+      {([2, 3] as const).map((d) => (
+        <button
+          key={d}
+          type="button"
+          aria-pressed={value === d}
+          onClick={() => onChange(d)}
+          className={`rounded-md px-3 py-1 transition ${
+            value === d
+              ? "bg-emerald-500/20 font-medium text-emerald-200"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          {d}D
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function NewtonDemo() {
+  const problem2d = useShiftedQuadraticProblem();
+  const problem3d = useShiftedQuadratic3DProblem();
+  const [dim, setDim] = useState<2 | 3>(2);
+  const [start2, setStart2] = useState({ x0: 0, y0: 0 });
+  const [start3, setStart3] = useState<[number, number, number]>([0, 0, 0]);
+  const { objective, gradient, hessian } = dim === 2 ? problem2d : problem3d;
+  const result = useMemo(() => {
+    const x0 = dim === 2 ? [start2.x0, start2.y0] : [...start3];
+    return newtonsMethod(objective, gradient, hessian, x0);
+  }, [
+    objective,
+    gradient,
+    hessian,
+    dim,
+    start2.x0,
+    start2.y0,
+    start3[0],
+    start3[1],
+    start3[2],
+  ]);
   return (
     <Section
       title="Newton's method"
@@ -160,15 +242,21 @@ function NewtonDemo() {
         </EquationWithWhere>
       }
     >
-      <QuadraticStartSliders
-        x0={x0}
-        y0={y0}
-        onChange={(a, b) => {
-          setX0(a);
-          setY0(b);
-        }}
-      />
-      <ContourPathChart objective={objective} path={result.path} />
+      <ProblemDimensionToggle value={dim} onChange={setDim} />
+      {dim === 2 ? (
+        <QuadraticStartSliders
+          x0={start2.x0}
+          y0={start2.y0}
+          onChange={(a, b) => setStart2({ x0: a, y0: b })}
+        />
+      ) : (
+        <QuadraticStartSliders3D values={start3} onChange={setStart3} />
+      )}
+      {dim === 2 ? (
+        <ObjectiveLandscapeView objective={objective} path={result.path} />
+      ) : (
+        <Path3DChart path={result.path} />
+      )}
       <OptimizationStepTable
         steps={result.steps}
         caption="Newton's method step-by-step iterations"
@@ -214,7 +302,7 @@ function DampedNewtonDemo() {
           setY0(b);
         }}
       />
-      <ContourPathChart objective={objective} path={result.path} />
+      <ObjectiveLandscapeView objective={objective} path={result.path} />
       <OptimizationStepTable
         steps={result.steps}
         caption="Damped Newton step-by-step iterations"
@@ -261,7 +349,7 @@ function ConjugateGradientDemo() {
           setY0(b);
         }}
       />
-      <ContourPathChart objective={objective} path={result.path} />
+      <ObjectiveLandscapeView objective={objective} path={result.path} />
       <OptimizationStepTable
         steps={result.steps}
         caption="Conjugate gradient step-by-step iterations"
@@ -310,7 +398,7 @@ function BfgsDemo() {
           setY0(b);
         }}
       />
-      <ContourPathChart objective={objective} path={result.path} />
+      <ObjectiveLandscapeView objective={objective} path={result.path} />
       <OptimizationStepTable
         steps={result.steps}
         caption="BFGS step-by-step iterations"
@@ -355,7 +443,7 @@ function LBfgsDemo() {
           setY0(b);
         }}
       />
-      <ContourPathChart objective={objective} path={result.path} />
+      <ObjectiveLandscapeView objective={objective} path={result.path} />
       <OptimizationStepTable
         steps={result.steps}
         caption="L-BFGS step-by-step iterations"
@@ -400,7 +488,7 @@ function QuasiNewtonDemo() {
           setY0(b);
         }}
       />
-      <ContourPathChart objective={objective} path={result.path} />
+      <ObjectiveLandscapeView objective={objective} path={result.path} />
       <OptimizationStepTable
         steps={result.steps}
         caption="Quasi-Newton (BFGS) step-by-step iterations"
@@ -447,7 +535,7 @@ function GaussNewtonDemo() {
           setY0(b);
         }}
       />
-      <ContourPathChart
+      <ObjectiveLandscapeView
         objective={objective}
         path={result.path}
         xRange={[-1, 2]}
@@ -487,7 +575,7 @@ function LevenbergMarquardtDemo() {
           setY0(b);
         }}
       />
-      <ContourPathChart
+      <ObjectiveLandscapeView
         objective={objective}
         path={result.path}
         xRange={[-1, 2]}

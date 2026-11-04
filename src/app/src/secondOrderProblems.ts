@@ -2,26 +2,45 @@
 
 export type Vec = number[];
 
+export const SHIFTED_QUADRATIC_TARGETS_2D = [1, 2] as const;
+export const SHIFTED_QUADRATIC_TARGETS_3D = [1, 2, 3] as const;
+
+export function makeShiftedQuadratic(targets: readonly number[]) {
+  const objective = (x: Vec): number => {
+    let sum = 0;
+    for (let i = 0; i < x.length; i += 1) {
+      const t = targets[i] ?? 0;
+      sum += 0.5 * (x[i]! - t) ** 2;
+    }
+    return sum;
+  };
+  const gradient = (x: Vec): Vec => x.map((xi, i) => xi - (targets[i] ?? 0));
+  const hessian = (_x: Vec): number[][] => {
+    const n = targets.length;
+    return Array.from({ length: n }, (_, i) =>
+      Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)),
+    );
+  };
+  return { objective, gradient, hessian, targets: [...targets] };
+}
+
+const shifted2d = makeShiftedQuadratic(SHIFTED_QUADRATIC_TARGETS_2D);
+
 export function shiftedQuadratic(x: Vec): number {
-  const targets = [1, 2];
-  let sum = 0;
-  for (let i = 0; i < x.length; i += 1) {
-    const t = targets[i] ?? 0;
-    sum += 0.5 * (x[i]! - t) ** 2;
-  }
-  return sum;
+  return shifted2d.objective(x);
 }
 
 export function shiftedQuadraticGrad(x: Vec): Vec {
-  return [x[0]! - 1, x[1]! - 2];
+  return shifted2d.gradient(x);
 }
 
 export function shiftedQuadraticHess(_x: Vec): number[][] {
-  return [
-    [1, 0],
-    [0, 1],
-  ];
+  return shifted2d.hessian(_x);
 }
+
+export const shiftedQuadratic3D = makeShiftedQuadratic(
+  SHIFTED_QUADRATIC_TARGETS_3D,
+);
 
 export function rosenbrockResidual(x: Vec): Vec {
   return [x[0]! - 1, 10 * (x[1]! - x[0]! ** 2)];

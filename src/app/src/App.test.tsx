@@ -28,6 +28,9 @@ describe("App", () => {
     expect(
       screen.getByRole("table", { name: /gradient descent step-by-step/i }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Gradient descent (GD) overview"),
+    ).toBeInTheDocument();
   });
 
   it("switches gradient concept page from the sidebar", () => {
@@ -75,6 +78,9 @@ describe("App", () => {
     for (const { title } of SECOND_ORDER_PAGES) {
       expect(screen.getByRole("button", { name: title })).toBeInTheDocument();
     }
+    expect(
+      screen.getByLabelText("Newton's method overview"),
+    ).toBeInTheDocument();
   });
 
   it("switches second-order concept page from sidebar", () => {
@@ -89,5 +95,6 @@ describe("App", () => {
     expect(
       screen.queryByRole("heading", { name: "Newton's method" }),
     ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("BFGS overview")).toBeInTheDocument();
   });
 });

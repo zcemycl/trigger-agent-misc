@@ -16,6 +16,10 @@ import {
   stochasticGradientDescent,
   type Vector,
 } from "../gradientMethod";
+import {
+  ConceptPageOverview,
+  type ConceptOverview,
+} from "./ConceptPageOverview";
 import { EquationWithWhere, type WhereClause } from "./EquationWithWhere";
 import { MathBlock } from "./MathBlock";
 import { OptimizationStepTable } from "./OptimizationStepTable";
@@ -457,17 +461,112 @@ function HeavyBallDemo() {
 
 export const GRADIENT_METHOD_CHAPTER = "Gradient methods";
 
+const GD_OVERVIEW: ConceptOverview = {
+  purpose:
+    "Find a minimizer of a smooth objective by repeatedly stepping opposite the gradient.",
+  explanation:
+    "Each step is a first-order move: locally steepest descent when the step size η is small enough. The demo uses a 1D finite sum of quadratics so the full gradient is the average of per-term slopes.",
+  references: [
+    "Cauchy (1847), steepest descent",
+    "Nocedal & Wright, Numerical Optimization, Ch. 3",
+    "Boyd & Vandenberghe, Convex Optimization, §9.3",
+  ],
+};
+
+const SGD_OVERVIEW: ConceptOverview = {
+  purpose:
+    "Optimize sums or expectations when evaluating the full gradient is too costly.",
+  explanation:
+    "One random term f_i is sampled per step, so updates are noisy but cheap. With a suitable learning-rate schedule, SGD still converges to a minimizer in expectation for convex problems.",
+  references: [
+    "Robbins & Monro (1951), stochastic approximation",
+    "Bottou, Curtis & Nocedal (2018), optimization methods for ML",
+    "Nocedal & Wright, Ch. 8",
+  ],
+};
+
+const MINIBATCH_OVERVIEW: ConceptOverview = {
+  purpose:
+    "Balance gradient noise and per-step cost by averaging over a subset of terms.",
+  explanation:
+    "Mini-batches reduce variance versus pure SGD while using fewer gradient evaluations than full batch GD. Batch size controls the trade-off between stability and throughput on modern hardware.",
+  references: [
+    "Dekel et al. (2012), mini-batch SGD analysis",
+    "Goodfellow, Bengio & Courville, Deep Learning, §8.1",
+  ],
+};
+
+const MOMENTUM_OVERVIEW: ConceptOverview = {
+  purpose:
+    "Accelerate gradient descent in ill-conditioned valleys by accumulating velocity.",
+  explanation:
+    "A fraction β of the previous update is added to the current gradient step, smoothing oscillations across steep and flat directions. Equivalent to a damped second-order system in the quadratic case.",
+  references: [
+    "Polyak (1964), heavy ball and momentum",
+    "Sutskever et al. (2013), momentum in deep learning",
+    "Nocedal & Wright, Ch. 7",
+  ],
+};
+
+const NESTEROV_OVERVIEW: ConceptOverview = {
+  purpose:
+    "Look ahead along velocity before evaluating the gradient, improving convergence on convex problems.",
+  explanation:
+    "The gradient is taken at a point extrapolated by momentum, aligning the search direction with where the iterate is heading. Often yields faster decrease than classical momentum on the same η and β.",
+  references: [
+    "Nesterov (1983, 1988), optimal methods for convex programming",
+    "Sutskever et al. (2013), Nesterov in practice",
+  ],
+};
+
+const HEAVY_BALL_OVERVIEW: ConceptOverview = {
+  purpose:
+    "Discretize a damped oscillatory dynamics that can converge faster than plain GD on quadratics.",
+  explanation:
+    "Like momentum, heavy-ball maintains velocity with coefficient β, but uses the gradient at the current point only (no lookahead). On strongly convex quadratics its rate depends on the condition number.",
+  references: [
+    "Polyak (1964), the heavy ball method",
+    "Lessard, Recht & Packard (2016), analysis via integral quadratic constraints",
+  ],
+};
+
 export const GRADIENT_METHOD_PAGES = [
-  { id: "gd", title: "Gradient descent (GD)", Demo: GradientDescentDemo },
-  { id: "sgd", title: "Stochastic gradient descent (SGD)", Demo: SgdDemo },
-  { id: "minibatch", title: "Mini-batch SGD", Demo: MinibatchDemo },
-  { id: "momentum", title: "Momentum", Demo: MomentumDemo },
+  {
+    id: "gd",
+    title: "Gradient descent (GD)",
+    Demo: GradientDescentDemo,
+    overview: GD_OVERVIEW,
+  },
+  {
+    id: "sgd",
+    title: "Stochastic gradient descent (SGD)",
+    Demo: SgdDemo,
+    overview: SGD_OVERVIEW,
+  },
+  {
+    id: "minibatch",
+    title: "Mini-batch SGD",
+    Demo: MinibatchDemo,
+    overview: MINIBATCH_OVERVIEW,
+  },
+  {
+    id: "momentum",
+    title: "Momentum",
+    Demo: MomentumDemo,
+    overview: MOMENTUM_OVERVIEW,
+  },
   {
     id: "nesterov",
     title: "Nesterov accelerated gradient",
     Demo: NesterovDemo,
+    overview: NESTEROV_OVERVIEW,
   },
-  { id: "heavy-ball", title: "Heavy-ball method", Demo: HeavyBallDemo },
+  {
+    id: "heavy-ball",
+    title: "Heavy-ball method",
+    Demo: HeavyBallDemo,
+    overview: HEAVY_BALL_OVERVIEW,
+  },
 ] as const;
 
 export type GradientMethodPageId = (typeof GRADIENT_METHOD_PAGES)[number]["id"];
@@ -521,7 +620,7 @@ export function GradientMethodConcepts({
 
   return (
     <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
-      <aside className="w-full shrink-0 lg:sticky lg:top-6 lg:w-56">
+      <aside className="w-full shrink-0 lg:sticky lg:top-6 lg:w-72">
         <nav
           className="flex flex-col gap-1"
           aria-label={`${GRADIENT_METHOD_CHAPTER} concepts`}
@@ -545,6 +644,10 @@ export function GradientMethodConcepts({
             );
           })}
         </nav>
+        <ConceptPageOverview
+          title={activePage.title}
+          overview={activePage.overview}
+        />
       </aside>
       <div className="min-w-0 flex-1">
         <ConceptIntro />

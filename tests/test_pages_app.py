@@ -166,6 +166,18 @@ def test_second_order_pages_include_step_by_step_tables() -> None:
     assert "steps" in (APP_ROOT / "src" / "secondOrder.ts").read_text(encoding="utf-8")
 
 
+def test_gradient_and_second_order_tabs_include_sidebar_overviews() -> None:
+    overview = (APP_ROOT / "src" / "components" / "ConceptPageOverview.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "Purpose." in overview
+    assert "References" in overview
+    for name in ("GradientMethodConcepts.tsx", "SecondOrderConcepts.tsx"):
+        concepts = (APP_ROOT / "src" / "components" / name).read_text(encoding="utf-8")
+        assert "ConceptPageOverview" in concepts
+        assert "overview:" in concepts
+
+
 def test_app_includes_interactive_second_order_demos() -> None:
     concepts = (APP_ROOT / "src" / "components" / "SecondOrderConcepts.tsx").read_text(
         encoding="utf-8"

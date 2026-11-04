@@ -20,6 +20,10 @@ import {
   shiftedQuadraticHess,
 } from "../secondOrderProblems";
 import {
+  ConceptChapterSidebar,
+  type ConceptViewMode,
+} from "./ConceptChapterSidebar";
+import {
   ConceptPageOverview,
   type ConceptOverview,
 } from "./ConceptPageOverview";
@@ -690,47 +694,34 @@ export function SecondOrderConcepts({
   initialPageId?: SecondOrderPageId;
 }) {
   const [activeId, setActiveId] = useState<SecondOrderPageId>(initialPageId);
+  const [viewMode, setViewMode] = useState<ConceptViewMode>("demo");
   const activePage =
     SECOND_ORDER_PAGES.find((p) => p.id === activeId) ?? SECOND_ORDER_PAGES[0];
   const ActiveDemo = activePage.Demo;
 
   return (
     <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
-      <aside className="w-full shrink-0 lg:sticky lg:top-6 lg:w-72">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-          {SECOND_ORDER_CHAPTER}
-        </p>
-        <nav
-          className="mt-3 flex flex-col gap-1"
-          aria-label={`${SECOND_ORDER_CHAPTER} concepts`}
-        >
-          {SECOND_ORDER_PAGES.map((page) => {
-            const isActive = page.id === activeId;
-            return (
-              <button
-                key={page.id}
-                type="button"
-                onClick={() => setActiveId(page.id)}
-                aria-current={isActive ? "page" : undefined}
-                className={`rounded-lg px-3 py-2 text-left text-sm transition ${
-                  isActive
-                    ? "bg-emerald-500/15 font-medium text-emerald-200"
-                    : "text-slate-400 hover:bg-slate-800/80 hover:text-slate-200"
-                }`}
-              >
-                {page.title}
-              </button>
-            );
-          })}
-        </nav>
-        <ConceptPageOverview
-          title={activePage.title}
-          overview={activePage.overview}
-        />
-      </aside>
+      <ConceptChapterSidebar
+        chapter={SECOND_ORDER_CHAPTER}
+        sectionLabel={SECOND_ORDER_CHAPTER}
+        pages={SECOND_ORDER_PAGES}
+        activeId={activeId}
+        onActiveIdChange={setActiveId}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+      />
       <div className="min-w-0 flex-1">
-        <ConceptIntro />
-        <ActiveDemo />
+        {viewMode === "overview" ? (
+          <ConceptPageOverview
+            title={activePage.title}
+            overview={activePage.overview}
+          />
+        ) : (
+          <>
+            <ConceptIntro />
+            <ActiveDemo />
+          </>
+        )}
       </div>
     </div>
   );

@@ -17,6 +17,10 @@ import {
   type Vector,
 } from "../gradientMethod";
 import {
+  ConceptChapterSidebar,
+  type ConceptViewMode,
+} from "./ConceptChapterSidebar";
+import {
   ConceptPageOverview,
   type ConceptOverview,
 } from "./ConceptPageOverview";
@@ -613,6 +617,7 @@ export function GradientMethodConcepts({
   initialPageId?: GradientMethodPageId;
 }) {
   const [activeId, setActiveId] = useState<GradientMethodPageId>(initialPageId);
+  const [viewMode, setViewMode] = useState<ConceptViewMode>("demo");
   const activePage =
     GRADIENT_METHOD_PAGES.find((p) => p.id === activeId) ??
     GRADIENT_METHOD_PAGES[0];
@@ -620,38 +625,26 @@ export function GradientMethodConcepts({
 
   return (
     <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
-      <aside className="w-full shrink-0 lg:sticky lg:top-6 lg:w-72">
-        <nav
-          className="flex flex-col gap-1"
-          aria-label={`${GRADIENT_METHOD_CHAPTER} concepts`}
-        >
-          {GRADIENT_METHOD_PAGES.map((page) => {
-            const isActive = page.id === activeId;
-            return (
-              <button
-                key={page.id}
-                type="button"
-                onClick={() => setActiveId(page.id)}
-                aria-current={isActive ? "page" : undefined}
-                className={`rounded-lg px-3 py-2 text-left text-sm transition ${
-                  isActive
-                    ? "bg-emerald-500/15 font-medium text-emerald-200"
-                    : "text-slate-400 hover:bg-slate-800/80 hover:text-slate-200"
-                }`}
-              >
-                {page.title}
-              </button>
-            );
-          })}
-        </nav>
-        <ConceptPageOverview
-          title={activePage.title}
-          overview={activePage.overview}
-        />
-      </aside>
+      <ConceptChapterSidebar
+        chapter={GRADIENT_METHOD_CHAPTER}
+        pages={GRADIENT_METHOD_PAGES}
+        activeId={activeId}
+        onActiveIdChange={setActiveId}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+      />
       <div className="min-w-0 flex-1">
-        <ConceptIntro />
-        <ActiveDemo />
+        {viewMode === "overview" ? (
+          <ConceptPageOverview
+            title={activePage.title}
+            overview={activePage.overview}
+          />
+        ) : (
+          <>
+            <ConceptIntro />
+            <ActiveDemo />
+          </>
+        )}
       </div>
     </div>
   );

@@ -28,6 +28,7 @@ describe("App", () => {
     expect(
       screen.getByRole("table", { name: /gradient descent step-by-step/i }),
     ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Overview" }));
     expect(
       screen.getByLabelText("Gradient descent (GD) overview"),
     ).toBeInTheDocument();
@@ -57,6 +58,10 @@ describe("App", () => {
     expect(
       screen.getByRole("heading", { name: "Exact line search" }),
     ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Overview" }));
+    expect(
+      screen.getByLabelText("Exact line search overview"),
+    ).toBeInTheDocument();
   });
 
   it("shows second-order chapter when selected", () => {
@@ -78,6 +83,7 @@ describe("App", () => {
     for (const { title } of SECOND_ORDER_PAGES) {
       expect(screen.getByRole("button", { name: title })).toBeInTheDocument();
     }
+    fireEvent.click(screen.getByRole("button", { name: "Overview" }));
     expect(
       screen.getByLabelText("Newton's method overview"),
     ).toBeInTheDocument();
@@ -95,6 +101,7 @@ describe("App", () => {
     expect(
       screen.queryByRole("heading", { name: "Newton's method" }),
     ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Overview" }));
     expect(screen.getByLabelText("BFGS overview")).toBeInTheDocument();
   });
 });

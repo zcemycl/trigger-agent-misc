@@ -17,6 +17,14 @@ import {
   quadraticPhi,
   quadraticPhiPrime,
 } from "../quadratic";
+import {
+  ConceptChapterSidebar,
+  type ConceptViewMode,
+} from "./ConceptChapterSidebar";
+import {
+  ConceptPageOverview,
+  type ConceptOverview,
+} from "./ConceptPageOverview";
 import { EquationWithWhere } from "./EquationWithWhere";
 import { MathBlock } from "./MathBlock";
 import { PhiChart } from "./PhiChart";
@@ -450,21 +458,100 @@ function GoldsteinDemo() {
 
 export const LINE_SEARCH_CHAPTER = "Line search";
 
+const EXACT_LS_OVERVIEW: ConceptOverview = {
+  purpose:
+    "Pick the step size that minimizes the 1D restriction of the objective along the search direction.",
+  explanation:
+    "Given φ(α) = f(x + αp), exact line search finds α* in a bracket where φ is unimodal. It is ideal when φ is cheap to evaluate and easy to minimize, but is rarely used alone in large-scale optimization.",
+  references: [
+    "Nocedal & Wright, Numerical Optimization, §3.1",
+    "Boyd & Vandenberghe, Convex Optimization, §9.2",
+  ],
+};
+
+const BACKTRACKING_OVERVIEW: ConceptOverview = {
+  purpose:
+    "Find an acceptable step length by shrinking α from an initial guess until a simple decrease condition holds.",
+  explanation:
+    "Backtracking starts at α₀ and multiplies α by ρ ∈ (0, 1) until sufficient decrease is met. It avoids solving for the exact minimizer and is the standard wrapper around Newton and quasi-Newton directions.",
+  references: [
+    "Armijo (1966), backtracking for Newton methods",
+    "Nocedal & Wright, §3.1–3.2",
+  ],
+};
+
+const ARMIJO_OVERVIEW: ConceptOverview = {
+  purpose:
+    "Require enough decrease along the search direction to guarantee global convergence of descent methods.",
+  explanation:
+    "The Armijo (sufficient decrease) condition φ(α) ≤ φ(0) + c₁ α φ′(0) with c₁ ≪ 1 rules out steps that are too short to make progress. Backtracking Armijo is the most common inexact line search in practice.",
+  references: ["Armijo (1966)", "Nocedal & Wright, §3.1"],
+};
+
+const WOLFE_OVERVIEW: ConceptOverview = {
+  purpose:
+    "Balance sufficient decrease with a requirement that the slope along φ is less negative at the chosen α.",
+  explanation:
+    "Wolfe pairs Armijo with a curvature condition φ′(α) ≥ c₂ φ′(0) (0 < c₁ < c₂ < 1). Accepted steps are neither too small nor too large, which helps quasi-Newton updates satisfy the secant equation.",
+  references: ["Wolfe (1969, 1971)", "Nocedal & Wright, §3.1, §6.1"],
+};
+
+const STRONG_WOLFE_OVERVIEW: ConceptOverview = {
+  purpose:
+    "Strengthen Wolfe curvature by bounding |φ′(α)| relative to |φ′(0)|.",
+  explanation:
+    "Strong Wolfe replaces the weak curvature inequality with |φ′(α)| ≤ c₂ |φ′(0)|, ensuring the directional derivative is substantially reduced. Line searches for BFGS and L-BFGS typically use strong Wolfe or close variants.",
+  references: [
+    "Nocedal & Wright, §3.1",
+    "Line search routines in MINPACK / More–Thuente",
+  ],
+};
+
+const GOLDSTEIN_OVERVIEW: ConceptOverview = {
+  purpose:
+    "Accept α only if φ(α) lies in a symmetric band around the linear model at α = 0.",
+  explanation:
+    "Goldstein conditions bracket φ(α) between two lines through φ(0) with slopes c and (1−c) times φ′(0). They imply both sufficient decrease and an upper bound on the step, offering an alternative to Wolfe for some descent proofs.",
+  references: ["Goldstein (1962)", "Nocedal & Wright, §3.1"],
+};
+
 export const LINE_SEARCH_PAGES = [
-  { id: "exact", title: "Exact line search", Demo: ExactLineSearchDemo },
+  {
+    id: "exact",
+    title: "Exact line search",
+    Demo: ExactLineSearchDemo,
+    overview: EXACT_LS_OVERVIEW,
+  },
   {
     id: "backtracking",
     title: "Backtracking line search",
     Demo: BacktrackingDemo,
+    overview: BACKTRACKING_OVERVIEW,
   },
-  { id: "armijo", title: "Armijo condition", Demo: ArmijoDemo },
-  { id: "wolfe", title: "Wolfe conditions", Demo: WolfeDemo },
+  {
+    id: "armijo",
+    title: "Armijo condition",
+    Demo: ArmijoDemo,
+    overview: ARMIJO_OVERVIEW,
+  },
+  {
+    id: "wolfe",
+    title: "Wolfe conditions",
+    Demo: WolfeDemo,
+    overview: WOLFE_OVERVIEW,
+  },
   {
     id: "strong-wolfe",
     title: "Strong Wolfe conditions",
     Demo: StrongWolfeDemo,
+    overview: STRONG_WOLFE_OVERVIEW,
   },
-  { id: "goldstein", title: "Goldstein conditions", Demo: GoldsteinDemo },
+  {
+    id: "goldstein",
+    title: "Goldstein conditions",
+    Demo: GoldsteinDemo,
+    overview: GOLDSTEIN_OVERVIEW,
+  },
 ] as const;
 
 export type LineSearchPageId = (typeof LINE_SEARCH_PAGES)[number]["id"];
@@ -502,40 +589,34 @@ export function LineSearchConcepts({
   initialPageId?: LineSearchPageId;
 }) {
   const [activeId, setActiveId] = useState<LineSearchPageId>(initialPageId);
+  const [viewMode, setViewMode] = useState<ConceptViewMode>("demo");
   const activePage =
     LINE_SEARCH_PAGES.find((p) => p.id === activeId) ?? LINE_SEARCH_PAGES[0];
   const ActiveDemo = activePage.Demo;
 
   return (
     <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
-      <aside className="w-full shrink-0 lg:sticky lg:top-6 lg:w-56">
-        <nav
-          className="flex flex-col gap-1"
-          aria-label={`${LINE_SEARCH_CHAPTER} concepts`}
-        >
-          {LINE_SEARCH_PAGES.map((page) => {
-            const isActive = page.id === activeId;
-            return (
-              <button
-                key={page.id}
-                type="button"
-                onClick={() => setActiveId(page.id)}
-                aria-current={isActive ? "page" : undefined}
-                className={`rounded-lg px-3 py-2 text-left text-sm transition ${
-                  isActive
-                    ? "bg-emerald-500/15 font-medium text-emerald-200"
-                    : "text-slate-400 hover:bg-slate-800/80 hover:text-slate-200"
-                }`}
-              >
-                {page.title}
-              </button>
-            );
-          })}
-        </nav>
-      </aside>
+      <ConceptChapterSidebar
+        chapter={LINE_SEARCH_CHAPTER}
+        aria-label={`${LINE_SEARCH_CHAPTER} concepts`}
+        pages={LINE_SEARCH_PAGES}
+        activeId={activeId}
+        onActiveIdChange={setActiveId}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+      />
       <div className="min-w-0 flex-1">
-        <ConceptIntro />
-        <ActiveDemo />
+        {viewMode === "overview" ? (
+          <ConceptPageOverview
+            title={activePage.title}
+            overview={activePage.overview}
+          />
+        ) : (
+          <>
+            <ConceptIntro />
+            <ActiveDemo />
+          </>
+        )}
       </div>
     </div>
   );

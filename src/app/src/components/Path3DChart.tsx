@@ -1,11 +1,18 @@
 import type { Vec } from "../secondOrder";
 import { fitIsoBounds, projectIso } from "./isometric";
+import type { PathHighlightRange } from "./pathHighlight";
+import {
+  pathPointFill,
+  pathPointOpacity,
+  pathPointRadius,
+} from "./pathPointStyle";
 
 interface Path3DChartProps {
   path: Vec[];
   /** Per-axis plot ranges [lo, hi] for x₁, x₂, x₃. */
   axisRanges?: [[number, number], [number, number], [number, number]];
   height?: number;
+  highlightPathRange?: PathHighlightRange | null;
 }
 
 export function Path3DChart({
@@ -16,6 +23,7 @@ export function Path3DChart({
     [-1, 4],
   ],
   height = 260,
+  highlightPathRange = null,
 }: Path3DChartProps) {
   const width = 480;
   const pad = 28;
@@ -101,15 +109,19 @@ export function Path3DChart({
       ) : null}
       {path.map((pt, idx) => {
         const { sx, sy } = toSvg(projectIso(pt[0]!, pt[1]!, pt[2]!, scale));
-        const isStart = idx === 0;
-        const isEnd = idx === path.length - 1;
+        const r = pathPointRadius(idx, path.length, highlightPathRange);
+        const fill = pathPointFill(idx, path.length, highlightPathRange);
+        const opacity = pathPointOpacity(idx, highlightPathRange);
         return (
           <circle
             key={idx}
             cx={sx}
             cy={sy}
-            r={isStart || isEnd ? 5 : 3}
-            fill={isStart ? "#fbbf24" : isEnd ? "#34d399" : "#818cf8"}
+            r={r}
+            fill={fill}
+            fillOpacity={opacity}
+            stroke={opacity === 1 && r >= 7 ? "#fdf2f8" : "none"}
+            strokeWidth={2}
           />
         );
       })}

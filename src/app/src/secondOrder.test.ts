@@ -31,6 +31,9 @@ describe("secondOrder", () => {
     expect(result.x[1]).toBeCloseTo(2, 8);
     expect(result.steps).toHaveLength(1);
     expect(result.steps[0]?.detail).toContain("Δx_k");
+    expect(result.steps[0]?.pathStartIndex).toBe(0);
+    expect(result.steps[0]?.pathEndIndex).toBe(1);
+    expect(result.path).toHaveLength(2);
   });
 
   it("damped Newton and CG reach the quadratic minimizer", () => {
@@ -68,5 +71,10 @@ describe("secondOrder", () => {
       [0, 0],
     );
     expect(lm.value).toBeLessThan(0.5);
+    expect(lm.path.length).toBeGreaterThanOrEqual(lm.steps.length + 1);
+    for (const step of lm.steps) {
+      expect(step.pathStartIndex).toBeDefined();
+      expect(step.pathEndIndex).toBeGreaterThanOrEqual(step.pathStartIndex!);
+    }
   });
 });

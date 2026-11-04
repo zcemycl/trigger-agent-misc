@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { ContourPathChart } from "./ContourPathChart";
 import { ObjectiveLandscapeView } from "./ObjectiveLandscapeView";
 import { Path3DChart } from "./Path3DChart";
 import { SurfacePathChart } from "./SurfacePathChart";
@@ -41,6 +42,23 @@ describe("OptimizationCharts", () => {
         name: /three-dimensional parameter space/i,
       }),
     ).toBeInTheDocument();
+  });
+
+  it("marks highlighted path points in contour chart", () => {
+    const { container } = render(
+      <ContourPathChart
+        objective={quad2}
+        path={[
+          [0, 0],
+          [0.5, 1],
+          [1, 2],
+        ]}
+        highlightPathRange={[1, 2]}
+      />,
+    );
+    const circles = container.querySelectorAll("circle");
+    expect(circles[1]?.getAttribute("r")).toBe("7");
+    expect(circles[0]?.getAttribute("fill-opacity")).toBe("0.35");
   });
 
   it("renders surface path chart alone", () => {

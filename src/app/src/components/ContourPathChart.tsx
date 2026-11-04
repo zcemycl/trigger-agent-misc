@@ -1,4 +1,10 @@
 import type { Vec } from "../secondOrder";
+import type { PathHighlightRange } from "./pathHighlight";
+import {
+  pathPointFill,
+  pathPointOpacity,
+  pathPointRadius,
+} from "./pathPointStyle";
 
 interface ContourPathChartProps {
   objective: (x: Vec) => number;
@@ -6,6 +12,7 @@ interface ContourPathChartProps {
   xRange?: [number, number];
   yRange?: [number, number];
   height?: number;
+  highlightPathRange?: PathHighlightRange | null;
 }
 
 export function ContourPathChart({
@@ -14,6 +21,7 @@ export function ContourPathChart({
   xRange = [-1, 4],
   yRange = [-1, 4],
   height = 240,
+  highlightPathRange = null,
 }: ContourPathChartProps) {
   const width = 480;
   const pad = { top: 16, right: 16, bottom: 32, left: 48 };
@@ -85,15 +93,19 @@ export function ContourPathChart({
       ) : null}
       {path.map((pt, idx) => {
         const { sx, sy } = toSvg(pt[0]!, pt[1]!);
-        const isStart = idx === 0;
-        const isEnd = idx === path.length - 1;
+        const r = pathPointRadius(idx, path.length, highlightPathRange);
+        const fill = pathPointFill(idx, path.length, highlightPathRange);
+        const opacity = pathPointOpacity(idx, highlightPathRange);
         return (
           <circle
             key={idx}
             cx={sx}
             cy={sy}
-            r={isStart || isEnd ? 5 : 3}
-            fill={isStart ? "#fbbf24" : isEnd ? "#34d399" : "#818cf8"}
+            r={r}
+            fill={fill}
+            fillOpacity={opacity}
+            stroke={opacity === 1 && r >= 7 ? "#fdf2f8" : "none"}
+            strokeWidth={2}
           />
         );
       })}

@@ -30,6 +30,7 @@ import { Path3DChart } from "./Path3DChart";
 import { EquationWithWhere, type WhereClause } from "./EquationWithWhere";
 import { MathBlock } from "./MathBlock";
 import { OptimizationStepTable } from "./OptimizationStepTable";
+import { pathHighlightRangeForStep } from "./pathHighlight";
 
 const WHERE_X_K: WhereClause = {
   tex: "\\mathbf{x}_k",
@@ -103,6 +104,56 @@ function ResultPanel({ result }: { result: OptimizeResult }) {
         {result.value.toExponential(3)}
       </p>
     </div>
+  );
+}
+
+function SecondOrderOptimizationTrace({
+  result,
+  objective,
+  caption,
+  xRange,
+  yRange,
+  chart = "landscape",
+  TableComponent = OptimizationStepTable,
+}: {
+  result: OptimizeResult;
+  objective?: (x: number[]) => number;
+  caption: string;
+  xRange?: [number, number];
+  yRange?: [number, number];
+  chart?: "landscape" | "path3d";
+  TableComponent?: typeof OptimizationStepTable;
+}) {
+  const [highlightedStep, setHighlightedStep] = useState<number | null>(null);
+  const highlightPathRange = useMemo(
+    () => pathHighlightRangeForStep(result.steps, highlightedStep),
+    [highlightedStep, result.steps],
+  );
+
+  return (
+    <>
+      {chart === "path3d" ? (
+        <Path3DChart
+          path={result.path}
+          highlightPathRange={highlightPathRange}
+        />
+      ) : (
+        <ObjectiveLandscapeView
+          objective={objective!}
+          path={result.path}
+          xRange={xRange}
+          yRange={yRange}
+          highlightPathRange={highlightPathRange}
+        />
+      )}
+      <TableComponent
+        steps={result.steps}
+        caption={caption}
+        highlightedStep={highlightedStep}
+        onHighlightedStepChange={setHighlightedStep}
+      />
+      <ResultPanel result={result} />
+    </>
   );
 }
 
@@ -252,16 +303,13 @@ function NewtonDemo() {
       ) : (
         <QuadraticStartSliders3D values={start3} onChange={setStart3} />
       )}
-      {dim === 2 ? (
-        <ObjectiveLandscapeView objective={objective} path={result.path} />
-      ) : (
-        <Path3DChart path={result.path} />
-      )}
-      <OptimizationStepTable
-        steps={result.steps}
+      <SecondOrderOptimizationTrace
+        result={result}
+        objective={objective}
+        chart={dim === 3 ? "path3d" : "landscape"}
         caption="Newton's method step-by-step iterations"
+        TableComponent={OptimizationStepTable}
       />
-      <ResultPanel result={result} />
     </Section>
   );
 }
@@ -302,12 +350,12 @@ function DampedNewtonDemo() {
           setY0(b);
         }}
       />
-      <ObjectiveLandscapeView objective={objective} path={result.path} />
-      <OptimizationStepTable
-        steps={result.steps}
+      <SecondOrderOptimizationTrace
+        result={result}
+        objective={objective}
         caption="Damped Newton step-by-step iterations"
+        TableComponent={OptimizationStepTable}
       />
-      <ResultPanel result={result} />
     </Section>
   );
 }
@@ -349,12 +397,12 @@ function ConjugateGradientDemo() {
           setY0(b);
         }}
       />
-      <ObjectiveLandscapeView objective={objective} path={result.path} />
-      <OptimizationStepTable
-        steps={result.steps}
+      <SecondOrderOptimizationTrace
+        result={result}
+        objective={objective}
         caption="Conjugate gradient step-by-step iterations"
+        TableComponent={OptimizationStepTable}
       />
-      <ResultPanel result={result} />
     </Section>
   );
 }
@@ -398,12 +446,12 @@ function BfgsDemo() {
           setY0(b);
         }}
       />
-      <ObjectiveLandscapeView objective={objective} path={result.path} />
-      <OptimizationStepTable
-        steps={result.steps}
+      <SecondOrderOptimizationTrace
+        result={result}
+        objective={objective}
         caption="BFGS step-by-step iterations"
+        TableComponent={OptimizationStepTable}
       />
-      <ResultPanel result={result} />
     </Section>
   );
 }
@@ -443,12 +491,12 @@ function LBfgsDemo() {
           setY0(b);
         }}
       />
-      <ObjectiveLandscapeView objective={objective} path={result.path} />
-      <OptimizationStepTable
-        steps={result.steps}
+      <SecondOrderOptimizationTrace
+        result={result}
+        objective={objective}
         caption="L-BFGS step-by-step iterations"
+        TableComponent={OptimizationStepTable}
       />
-      <ResultPanel result={result} />
     </Section>
   );
 }
@@ -488,12 +536,12 @@ function QuasiNewtonDemo() {
           setY0(b);
         }}
       />
-      <ObjectiveLandscapeView objective={objective} path={result.path} />
-      <OptimizationStepTable
-        steps={result.steps}
+      <SecondOrderOptimizationTrace
+        result={result}
+        objective={objective}
         caption="Quasi-Newton (BFGS) step-by-step iterations"
+        TableComponent={OptimizationStepTable}
       />
-      <ResultPanel result={result} />
     </Section>
   );
 }
@@ -535,17 +583,14 @@ function GaussNewtonDemo() {
           setY0(b);
         }}
       />
-      <ObjectiveLandscapeView
+      <SecondOrderOptimizationTrace
+        result={result}
         objective={objective}
-        path={result.path}
         xRange={[-1, 2]}
         yRange={[-1, 2]}
-      />
-      <OptimizationStepTable
-        steps={result.steps}
         caption="Gauss–Newton step-by-step iterations"
+        TableComponent={OptimizationStepTable}
       />
-      <ResultPanel result={result} />
     </Section>
   );
 }
@@ -575,17 +620,14 @@ function LevenbergMarquardtDemo() {
           setY0(b);
         }}
       />
-      <ObjectiveLandscapeView
+      <SecondOrderOptimizationTrace
+        result={result}
         objective={objective}
-        path={result.path}
         xRange={[-1, 2]}
         yRange={[-1, 2]}
-      />
-      <OptimizationStepTable
-        steps={result.steps}
         caption="Levenberg–Marquardt step-by-step iterations"
+        TableComponent={OptimizationStepTable}
       />
-      <ResultPanel result={result} />
     </Section>
   );
 }

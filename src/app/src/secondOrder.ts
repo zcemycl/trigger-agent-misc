@@ -1,6 +1,6 @@
 /** Multivariate second-order optimization (mirrors second_order.py). */
 
-import { backtrackingArmijo } from "./lineSearch";
+import { backtrackingArmijo, backtrackingTrialAlphas } from "./lineSearch";
 
 export type Vec = number[];
 export type Mat = number[][];
@@ -17,6 +17,10 @@ export interface SecondOrderIterationStep {
   xNext: Vec;
   objective: number;
   detail: string;
+  /** Index into ``OptimizeResult.path`` for x_k (pre-update). */
+  pathStartIndex?: number;
+  /** Inclusive end index in ``path`` for this step (trials and accept). */
+  pathEndIndex?: number;
 }
 
 export interface OptimizeResult {
@@ -40,15 +44,38 @@ function pushStep(
   delta: Vec,
   objectiveValue: number,
   detail: string,
-): void {
-  steps.push({
+  pathStartIndex?: number,
+): SecondOrderIterationStep {
+  const row: SecondOrderIterationStep = {
     iteration,
     x: x.slice(),
     delta: delta.slice(),
     xNext: vecAdd(x, delta).slice(),
     objective: objectiveValue,
     detail,
-  });
+    pathStartIndex,
+  };
+  steps.push(row);
+  return row;
+}
+
+function appendPathPoint(path: Vec[], point: Vec): void {
+  const last = path[path.length - 1];
+  if (last && norm2(vecSub(last, point)) <= 1e-14) {
+    return;
+  }
+  path.push(point.slice());
+}
+
+function appendLineSearchPath(
+  path: Vec[],
+  x: Vec,
+  direction: Vec,
+  trialAlphas: number[],
+): void {
+  for (const alpha of trialAlphas) {
+    appendPathPoint(path, vecAdd(x, vecScale(direction, alpha)));
+  }
 }
 
 export function vecAdd(a: Vec, b: Vec): Vec {
@@ -151,19 +178,17 @@ function armijoStep(
   alpha0: number,
   c1: number,
   rho: number,
-): number {
+): { alpha: number; direction: Vec; trialAlphas: number[] } {
   let dir = direction;
   let phiPrime0 = dot(g, dir);
   if (phiPrime0 >= 0) {
     dir = vecScale(g, -1);
     phiPrime0 = dot(g, dir);
   }
-  const ls = backtrackingArmijo(
-    (alpha) => objective(vecAdd(x, vecScale(dir, alpha))),
-    phiPrime0,
-    { alpha0, c1, rho },
-  );
-  return ls.alpha;
+  const phi = (alpha: number) => objective(vecAdd(x, vecScale(dir, alpha)));
+  const trialAlphas = backtrackingTrialAlphas(phi, phiPrime0, alpha0, c1, rho);
+  const ls = backtrackingArmijo(phi, phiPrime0, { alpha0, c1, rho });
+  return { alpha: ls.alpha, direction: dir, trialAlphas };
 }
 
 export function newtonsMethod(
@@ -199,8 +224,9 @@ export function newtonsMethod(
       };
     }
     try {
+      const pathStartIndex = path.length - 1;
       const step = vecScale(solveLinear(hessian(x), g), -1);
-      pushStep(
+      const row = pushStep(
         steps,
         iterations,
         x,
@@ -209,10 +235,12 @@ export function newtonsMethod(
         `∇f(x_k) = ${formatVector(g)}; Δx_k = −H(x_k)⁻¹∇f(x_k) = ${formatVector(
           step,
         )}`,
+        pathStartIndex,
       );
       xPrev = x;
       x = vecAdd(x, step);
-      path.push([...x]);
+      appendPathPoint(path, x);
+      row.pathEndIndex = path.length - 1;
     } catch {
       return {
         x,
@@ -274,9 +302,14 @@ export function dampedNewtonMethod(
     } catch {
       return { x, value: fx, iterations, converged: false, path, steps };
     }
-    const alpha = armijoStep(objective, x, direction, g, alpha0, c1, rho);
-    const delta = vecScale(direction, alpha);
-    pushStep(
+    const pathStartIndex = path.length - 1;
+    const {
+      alpha,
+      direction: dir,
+      trialAlphas,
+    } = armijoStep(objective, x, direction, g, alpha0, c1, rho);
+    const delta = vecScale(dir, alpha);
+    const row = pushStep(
       steps,
       iterations,
       x,
@@ -285,10 +318,12 @@ export function dampedNewtonMethod(
       `d_k = −H_k⁻¹∇f_k; α_k = ${alpha.toFixed(
         4,
       )} (Armijo); Δx_k = α_k d_k = ${formatVector(delta)}`,
+      pathStartIndex,
     );
+    appendLineSearchPath(path, x, dir, trialAlphas);
+    row.pathEndIndex = path.length - 1;
     xPrev = x;
     x = vecAdd(x, delta);
-    path.push([...x]);
     fx = objective(x);
     iterations += 1;
   }
@@ -333,9 +368,14 @@ export function conjugateGradient(
     if (norm2(g) <= gradTol) {
       return { x, value: fx, iterations, converged: true, path, steps };
     }
-    const alpha = armijoStep(objective, x, direction, g, alpha0, c1, rho);
-    const delta = vecScale(direction, alpha);
-    pushStep(
+    const pathStartIndex = path.length - 1;
+    const {
+      alpha,
+      direction: dir,
+      trialAlphas,
+    } = armijoStep(objective, x, direction, g, alpha0, c1, rho);
+    const delta = vecScale(dir, alpha);
+    const row = pushStep(
       steps,
       iterations,
       x,
@@ -344,9 +384,11 @@ export function conjugateGradient(
       `d_k search direction; α_k = ${alpha.toFixed(4)}; Δx_k = ${formatVector(
         delta,
       )}`,
+      pathStartIndex,
     );
+    appendLineSearchPath(path, x, dir, trialAlphas);
+    row.pathEndIndex = path.length - 1;
     x = vecAdd(x, delta);
-    path.push([...x]);
     const gNew = gradient(x);
     fx = objective(x);
     iterations += 1;
@@ -401,10 +443,15 @@ export function bfgs(
     if (norm2(g) <= gradTol) {
       return { x, value: fx, iterations, converged: true, path, steps };
     }
+    const pathStartIndex = path.length - 1;
     let direction = matVec(b, vecScale(g, -1));
-    const alpha = armijoStep(objective, x, direction, g, alpha0, c1, rho);
-    const s = vecScale(direction, alpha);
-    pushStep(
+    const {
+      alpha,
+      direction: dir,
+      trialAlphas,
+    } = armijoStep(objective, x, direction, g, alpha0, c1, rho);
+    const s = vecScale(dir, alpha);
+    const row = pushStep(
       steps,
       iterations,
       x,
@@ -413,7 +460,10 @@ export function bfgs(
       `p_k = −B_k∇f_k; α_k = ${alpha.toFixed(
         4,
       )}; s_k = α_k p_k = ${formatVector(s)}`,
+      pathStartIndex,
     );
+    appendLineSearchPath(path, x, dir, trialAlphas);
+    row.pathEndIndex = path.length - 1;
     const xNew = vecAdd(x, s);
     const gNew = gradient(xNew);
     const y = vecSub(gNew, g);
@@ -431,7 +481,6 @@ export function bfgs(
       b = matAdd(matMul(matMul(left, b), right), outerS);
     }
     x = xNew;
-    path.push([...x]);
     g = gNew;
     fx = objective(x);
     iterations += 1;
@@ -516,10 +565,15 @@ export function lbfgs(
     if (norm2(g) <= gradTol) {
       return { x, value: fx, iterations, converged: true, path, steps };
     }
+    const pathStartIndex = path.length - 1;
     const direction = lbfgsDirection(g, sHist, yHist, rhoHist);
-    const alpha = armijoStep(objective, x, direction, g, alpha0, c1, rho);
-    const s = vecScale(direction, alpha);
-    pushStep(
+    const {
+      alpha,
+      direction: dir,
+      trialAlphas,
+    } = armijoStep(objective, x, direction, g, alpha0, c1, rho);
+    const s = vecScale(dir, alpha);
+    const row = pushStep(
       steps,
       iterations,
       x,
@@ -528,7 +582,10 @@ export function lbfgs(
       `L-BFGS two-loop direction; α_k = ${alpha.toFixed(
         4,
       )}; s_k = ${formatVector(s)}`,
+      pathStartIndex,
     );
+    appendLineSearchPath(path, x, dir, trialAlphas);
+    row.pathEndIndex = path.length - 1;
     const xNew = vecAdd(x, s);
     const gNew = gradient(xNew);
     const y = vecSub(gNew, g);
@@ -544,7 +601,6 @@ export function lbfgs(
       }
     }
     x = xNew;
-    path.push([...x]);
     g = gNew;
     fx = objective(x);
     iterations += 1;
@@ -595,17 +651,20 @@ export function gaussNewton(
       };
     }
     try {
+      const pathStartIndex = path.length - 1;
       const step = vecScale(solveLinear(jtj, g), -1);
-      pushStep(
+      const row = pushStep(
         steps,
         iterations,
         x,
         step,
         fx,
         `Δx_k = −(JᵀJ)⁻¹Jᵀr = ${formatVector(step)}`,
+        pathStartIndex,
       );
       x = vecAdd(x, step);
-      path.push([...x]);
+      appendPathPoint(path, x);
+      row.pathEndIndex = path.length - 1;
     } catch {
       return {
         x,
@@ -662,7 +721,9 @@ export function levenbergMarquardt(
       return { x, value: fx, iterations, converged: true, path, steps };
     }
     const jtj = matMul(jt, j);
+    const pathStartIndex = path.length - 1;
     let accepted = false;
+    let row: SecondOrderIterationStep | null = null;
     for (let attempt = 0; attempt < 12; attempt += 1) {
       try {
         const a = matAdd(jtj, matScale(identity(x.length), lam));
@@ -670,21 +731,24 @@ export function levenbergMarquardt(
         const xTrial = vecAdd(x, step);
         const fTrial = 0.5 * dot(residual(xTrial), residual(xTrial));
         if (fTrial < fx) {
-          pushStep(
+          row = pushStep(
             steps,
             iterations,
             x,
             step,
             fx,
             `λ = ${lam.toExponential(2)}; Δx_k = ${formatVector(step)}`,
+            pathStartIndex,
           );
+          appendPathPoint(path, xTrial);
+          row.pathEndIndex = path.length - 1;
           x = xTrial;
-          path.push([...x]);
           fx = fTrial;
           lam = Math.max(lam * lambdaDown, 1e-16);
           accepted = true;
           break;
         }
+        appendPathPoint(path, xTrial);
         lam *= lambdaUp;
       } catch {
         lam *= lambdaUp;

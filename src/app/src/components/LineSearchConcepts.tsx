@@ -459,60 +459,104 @@ function GoldsteinDemo() {
 export const LINE_SEARCH_CHAPTER = "Line search";
 
 const EXACT_LS_OVERVIEW: ConceptOverview = {
-  purpose:
-    "Pick the step size that minimizes the 1D restriction of the objective along the search direction.",
-  explanation:
-    "Given φ(α) = f(x + αp), exact line search finds α* in a bracket where φ is unimodal. It is ideal when φ is cheap to evaluate and easy to minimize, but is rarely used alone in large-scale optimization.",
+  purposeTex:
+    "\\varphi(\\alpha) = f(\\mathbf{x} + \\alpha\\mathbf{p}) \\quad\\text{minimize over } \\alpha",
+  explanationTex:
+    "\\alpha^\\star \\in \\arg\\min_{\\alpha>0} \\varphi(\\alpha)",
   references: [
-    "Nocedal & Wright, Numerical Optimization, §3.1",
-    "Boyd & Vandenberghe, Convex Optimization, §9.2",
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, Numerical Optimization, §3.1",
+    },
+    {
+      href: "https://web.stanford.edu/~boyd/cvxbook/",
+      label: "Boyd & Vandenberghe, Convex Optimization, §9.2",
+    },
   ],
 };
 
 const BACKTRACKING_OVERVIEW: ConceptOverview = {
-  purpose:
-    "Find an acceptable step length by shrinking α from an initial guess until a simple decrease condition holds.",
-  explanation:
-    "Backtracking starts at α₀ and multiplies α by ρ ∈ (0, 1) until sufficient decrease is met. It avoids solving for the exact minimizer and is the standard wrapper around Newton and quasi-Newton directions.",
+  purposeTex:
+    "\\text{Find } \\alpha>0 \\text{ by shrinking until a decrease test passes}",
+  explanationTex:
+    "\\alpha \\leftarrow \\rho\\alpha \\quad\\text{while } \\varphi(\\alpha) \\text{ fails the test, } \\rho \\in (0,1)",
   references: [
-    "Armijo (1966), backtracking for Newton methods",
-    "Nocedal & Wright, §3.1–3.2",
+    {
+      href: "https://doi.org/10.1137/0706016",
+      label: "Armijo (1966), backtracking for Newton methods",
+    },
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, §3.1–3.2",
+    },
   ],
 };
 
 const ARMIJO_OVERVIEW: ConceptOverview = {
-  purpose:
-    "Require enough decrease along the search direction to guarantee global convergence of descent methods.",
-  explanation:
-    "The Armijo (sufficient decrease) condition φ(α) ≤ φ(0) + c₁ α φ′(0) with c₁ ≪ 1 rules out steps that are too short to make progress. Backtracking Armijo is the most common inexact line search in practice.",
-  references: ["Armijo (1966)", "Nocedal & Wright, §3.1"],
+  purposeTex: "\\text{Sufficient decrease along the search direction}",
+  explanationTex:
+    "\\varphi(\\alpha) \\le \\varphi(0) + c_1 \\alpha \\varphi'(0),\\quad c_1 \\in (0,1)",
+  references: [
+    {
+      href: "https://doi.org/10.1137/0706016",
+      label: "Armijo (1966)",
+    },
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, §3.1",
+    },
+  ],
 };
 
 const WOLFE_OVERVIEW: ConceptOverview = {
-  purpose:
-    "Balance sufficient decrease with a requirement that the slope along φ is less negative at the chosen α.",
-  explanation:
-    "Wolfe pairs Armijo with a curvature condition φ′(α) ≥ c₂ φ′(0) (0 < c₁ < c₂ < 1). Accepted steps are neither too small nor too large, which helps quasi-Newton updates satisfy the secant equation.",
-  references: ["Wolfe (1969, 1971)", "Nocedal & Wright, §3.1, §6.1"],
+  purposeTex:
+    "\\text{Pair decrease with a curvature check on } \\varphi'(\\alpha)",
+  explanationTex:
+    "\\varphi(\\alpha) \\le \\varphi(0) + c_1 \\alpha \\varphi'(0),\\quad \\varphi'(\\alpha) \\ge c_2 \\varphi'(0)",
+  references: [
+    {
+      href: "https://doi.org/10.1137/0706016",
+      label: "Wolfe (1969, 1971)",
+    },
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, §3.1, §6.1",
+    },
+  ],
 };
 
 const STRONG_WOLFE_OVERVIEW: ConceptOverview = {
-  purpose:
-    "Strengthen Wolfe curvature by bounding |φ′(α)| relative to |φ′(0)|.",
-  explanation:
-    "Strong Wolfe replaces the weak curvature inequality with |φ′(α)| ≤ c₂ |φ′(0)|, ensuring the directional derivative is substantially reduced. Line searches for BFGS and L-BFGS typically use strong Wolfe or close variants.",
+  purposeTex:
+    "\\text{Bound the magnitude of the directional derivative at } \\alpha",
+  explanationTex:
+    "|\\varphi'(\\alpha)| \\le c_2 |\\varphi'(0)|,\\quad 0 < c_1 < c_2 < 1",
   references: [
-    "Nocedal & Wright, §3.1",
-    "Line search routines in MINPACK / More–Thuente",
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, §3.1",
+    },
+    {
+      href: "https://www.netlib.org/minpack/",
+      label: "MINPACK / More–Thuente line search",
+    },
   ],
 };
 
 const GOLDSTEIN_OVERVIEW: ConceptOverview = {
-  purpose:
-    "Accept α only if φ(α) lies in a symmetric band around the linear model at α = 0.",
-  explanation:
-    "Goldstein conditions bracket φ(α) between two lines through φ(0) with slopes c and (1−c) times φ′(0). They imply both sufficient decrease and an upper bound on the step, offering an alternative to Wolfe for some descent proofs.",
-  references: ["Goldstein (1962)", "Nocedal & Wright, §3.1"],
+  purposeTex:
+    "\\text{Bracket } \\varphi(\\alpha) \\text{ between two linear models at } \\alpha=0",
+  explanationTex:
+    "\\varphi(0) + (1-c)\\alpha\\varphi'(0) \\le \\varphi(\\alpha) \\le \\varphi(0) + c\\alpha\\varphi'(0)",
+  references: [
+    {
+      href: "https://doi.org/10.2307/2286540",
+      label: "Goldstein (1962)",
+    },
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, §3.1",
+    },
+  ],
 };
 
 export const LINE_SEARCH_PAGES = [

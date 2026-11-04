@@ -30,6 +30,18 @@ export function ConceptChapterSidebar<T extends string>({
         className={`flex flex-col gap-1 ${sectionLabel ? "mt-3" : ""}`}
         aria-label={navAriaLabel ?? `${chapter} concepts`}
       >
+        <button
+          type="button"
+          onClick={() => onViewModeChange("overview")}
+          aria-current={viewMode === "overview" ? "page" : undefined}
+          className={`rounded-lg border border-slate-800 px-3 py-2 text-left text-sm transition ${
+            viewMode === "overview"
+              ? "bg-emerald-500/15 font-medium text-emerald-200"
+              : "text-slate-400 hover:bg-slate-800/80 hover:text-slate-200"
+          }`}
+        >
+          Overview
+        </button>
         {pages.map((page) => {
           const isActive = page.id === activeId && viewMode === "demo";
           return (
@@ -51,18 +63,6 @@ export function ConceptChapterSidebar<T extends string>({
             </button>
           );
         })}
-        <button
-          type="button"
-          onClick={() => onViewModeChange("overview")}
-          aria-current={viewMode === "overview" ? "page" : undefined}
-          className={`mt-2 rounded-lg border border-slate-800 px-3 py-2 text-left text-sm transition ${
-            viewMode === "overview"
-              ? "bg-emerald-500/15 font-medium text-emerald-200"
-              : "text-slate-400 hover:bg-slate-800/80 hover:text-slate-200"
-          }`}
-        >
-          Overview
-        </button>
       </nav>
     </aside>
   );

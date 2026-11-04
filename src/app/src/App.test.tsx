@@ -17,6 +17,12 @@ describe("App", () => {
     expect(
       screen.getByRole("navigation", { name: "Gradient methods concepts" }),
     ).toBeInTheDocument();
+    const conceptNav = screen.getByRole("navigation", {
+      name: "Gradient methods concepts",
+    });
+    expect(within(conceptNav).getAllByRole("button")[0]).toHaveAccessibleName(
+      "Overview",
+    );
 
     for (const { title } of GRADIENT_METHOD_PAGES) {
       expect(screen.getByRole("button", { name: title })).toBeInTheDocument();
@@ -32,6 +38,10 @@ describe("App", () => {
     expect(
       screen.getByLabelText("Gradient descent (GD) overview"),
     ).toBeInTheDocument();
+    expect(screen.getAllByTestId("math-block").length).toBeGreaterThanOrEqual(
+      2,
+    );
+    expect(screen.getAllByRole("link").length).toBeGreaterThanOrEqual(1);
   });
 
   it("switches gradient concept page from the sidebar", () => {

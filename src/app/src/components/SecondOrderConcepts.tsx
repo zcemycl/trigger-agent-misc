@@ -516,94 +516,152 @@ function LevenbergMarquardtDemo() {
 export const SECOND_ORDER_CHAPTER = "Second-order optimization";
 
 const NEWTON_OVERVIEW: ConceptOverview = {
-  purpose:
-    "Minimize a smooth function using a local quadratic model built from the Hessian.",
-  explanation:
-    "Each step solves the Newton system H_k Δx = −∇f_k and jumps to x_k + Δx. For a convex quadratic with exact Hessians, one step reaches the minimizer; on general functions it is a fast local method when H_k is well conditioned.",
+  purposeTex:
+    "\\min_{\\mathbf{x}} f(\\mathbf{x}) \\quad\\text{via local quadratic models}",
+  explanationTex:
+    "\\mathbf{x}_{k+1} = \\mathbf{x}_k - \\mathbf{H}(\\mathbf{x}_k)^{-1}\\nabla f(\\mathbf{x}_k)",
   references: [
-    "Isaac Newton (1669), root finding via quadratics",
-    "Nocedal & Wright, Numerical Optimization, Ch. 2 & 6",
-    "Boyd & Vandenberghe, Convex Optimization, §9.5",
+    {
+      href: "https://en.wikipedia.org/wiki/Newton%27s_method_in_optimization",
+      label: "Newton (1669), quadratic models for roots",
+    },
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, Ch. 2 & 6",
+    },
+    {
+      href: "https://web.stanford.edu/~boyd/cvxbook/",
+      label: "Boyd & Vandenberghe, §9.5",
+    },
   ],
 };
 
 const DAMPED_NEWTON_OVERVIEW: ConceptOverview = {
-  purpose:
-    "Retain Newton directions while guaranteeing progress via a line search on the step length.",
-  explanation:
-    "Pure Newton can overshoot when the quadratic model is poor or H is indefinite. Backtracking Armijo shortens α_k along d_k = −H_k⁻¹∇f_k until sufficient decrease holds, improving global convergence behavior.",
+  purposeTex: "\\text{Globalize Newton with a line search on the step}",
+  explanationTex:
+    "\\mathbf{x}_{k+1} = \\mathbf{x}_k + \\alpha_k \\mathbf{d}_k,\\quad \\mathbf{d}_k = -\\mathbf{H}_k^{-1}\\nabla f_k",
   references: [
-    "Dennis & Schnabel (1983), globalized Newton methods",
-    "Nocedal & Wright, Ch. 6.3 (line search Newton)",
+    {
+      href: "https://doi.org/10.1137/0706016",
+      label: "Dennis & Schnabel (1983), globalized Newton",
+    },
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, Ch. 6.3",
+    },
   ],
 };
 
 const CG_OVERVIEW: ConceptOverview = {
-  purpose:
-    "Solve large smooth minimization problems without forming or storing the Hessian.",
-  explanation:
-    "Search directions are conjugate with respect to the Hessian on quadratics, so n steps solve an n-dimensional quadratic in exact arithmetic. The nonlinear demo uses Fletcher–Reeves β and restarts for general f.",
+  purposeTex:
+    "\\min f(\\mathbf{x}) \\quad\\text{without explicit Hessian storage}",
+  explanationTex:
+    "\\mathbf{d}_{k+1} = -\\nabla f_{k+1} + \\beta_k \\mathbf{d}_k,\\quad \\beta_k^{\\mathrm{FR}} = \\frac{\\|\\nabla f_{k+1}\\|^2}{\\|\\nabla f_k\\|^2}",
   references: [
-    "Hestenes & Stiefel (1952), conjugate gradients for linear systems",
-    "Fletcher & Reeves (1964), nonlinear CG",
-    "Nocedal & Wright, Ch. 5–6",
+    {
+      href: "https://doi.org/10.1090/S0025-5718-1952-0062154-5",
+      label: "Hestenes & Stiefel (1952), conjugate gradients",
+    },
+    {
+      href: "https://doi.org/10.1093/comjnl/7.2.149",
+      label: "Fletcher & Reeves (1964), nonlinear CG",
+    },
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, Ch. 5–6",
+    },
   ],
 };
 
 const QUASI_NEWTON_OVERVIEW: ConceptOverview = {
-  purpose:
-    "Achieve Newton-like convergence using only gradient information to build curvature.",
-  explanation:
-    "A matrix B_k (or its inverse) is updated each step so that secant conditions approximate the Hessian. The demo follows the standard quasi-Newton step p_k = −B_k ∇f_k with line search.",
+  purposeTex:
+    "\\min f(\\mathbf{x}) \\quad\\text{with secant Hessian approximations}",
+  explanationTex:
+    "\\mathbf{x}_{k+1} = \\mathbf{x}_k + \\alpha_k \\mathbf{p}_k,\\quad \\mathbf{p}_k = -\\mathbf{B}_k \\nabla f_k",
   references: [
-    "Davidon (1959), variable metric methods",
-    "Nocedal & Wright, Ch. 6 (quasi-Newton methods)",
+    {
+      href: "https://doi.org/10.1137/0706016",
+      label: "Davidon (1959), variable metric methods",
+    },
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, Ch. 6",
+    },
   ],
 };
 
 const BFGS_OVERVIEW: ConceptOverview = {
-  purpose:
-    "Maintain a positive-definite inverse Hessian approximation with a stable rank-two update.",
-  explanation:
-    "BFGS enforces the secant equation on B_k and is the workhorse for medium-scale unconstrained optimization. The update uses step s_k and gradient change y_k; the demo tracks B_k explicitly in 2D.",
+  purposeTex:
+    "\\text{Maintain } \\mathbf{B}_k \\approx \\mathbf{H}^{-1} \\text{ with rank-two updates}",
+  explanationTex:
+    "\\mathbf{B}_{k+1} = (\\mathbf{I}-\\rho_k \\mathbf{s}_k \\mathbf{y}_k^\\top)\\mathbf{B}_k(\\mathbf{I}-\\rho_k \\mathbf{y}_k \\mathbf{s}_k^\\top)+\\rho_k \\mathbf{s}_k \\mathbf{s}_k^\\top",
   references: [
-    "Broyden (1970); Fletcher (1970); Goldfarb (1970); Shanno (1970)",
-    "Nocedal & Wright, §6.1–6.2",
+    {
+      href: "https://doi.org/10.1093/imamat/6.1.76",
+      label: "Broyden–Fletcher–Goldfarb–Shanno (1970)",
+    },
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, §6.1–6.2",
+    },
   ],
 };
 
 const LBFGS_OVERVIEW: ConceptOverview = {
-  purpose:
-    "Scale quasi-Newton ideas to high dimensions by storing only recent (s, y) pairs.",
-  explanation:
-    "L-BFGS applies the inverse BFGS update implicitly via a two-loop recursion over the last m steps. Memory is O(mn) instead of O(n²), which is essential for large machine-learning models.",
+  purposeTex:
+    "\\text{Implicit BFGS from the last } m \\text{ pairs } (\\mathbf{s}_i,\\mathbf{y}_i)",
+  explanationTex:
+    "\\mathbf{p}_k = -\\mathbf{H}_k \\nabla f_k \\quad\\text{(two-loop recursion, memory } O(mn)\\text{)}",
   references: [
-    "Liu & Nocedal (1989), limited memory BFGS",
-    "Nocedal & Wright, §7.2",
+    {
+      href: "https://doi.org/10.1093/imamat/45.1-3.503",
+      label: "Liu & Nocedal (1989), L-BFGS",
+    },
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, §7.2",
+    },
   ],
 };
 
 const GAUSS_NEWTON_OVERVIEW: ConceptOverview = {
-  purpose:
-    "Minimize nonlinear least-squares objectives by linearizing the residual each iteration.",
-  explanation:
-    "Gauss–Newton solves (JᵀJ) Δx = −Jᵀr using the Jacobian of residuals r(x). It equals Newton on ½‖r‖² when second-order terms in the Hessian are dropped, and is standard for fitting and inverse problems.",
+  purposeTex: "\\min_{\\mathbf{x}} \\tfrac12 \\|\\mathbf{r}(\\mathbf{x})\\|^2",
+  explanationTex:
+    "\\Delta\\mathbf{x} = -(\\mathbf{J}^\\top\\mathbf{J})^{-1}\\mathbf{J}^\\top\\mathbf{r}",
   references: [
-    "Gauss (1809), least squares",
-    "Nocedal & Wright, §10.3",
-    "Björck, Numerical Methods for Least Squares Problems",
+    {
+      href: "https://en.wikipedia.org/wiki/Gauss%E2%80%93Newton_algorithm",
+      label: "Gauss (1809), least squares",
+    },
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, §10.3",
+    },
+    {
+      href: "https://www.siam.org/books/ot51/",
+      label: "Björck, Numerical Methods for Least Squares",
+    },
   ],
 };
 
 const LM_OVERVIEW: ConceptOverview = {
-  purpose:
-    "Stabilize Gauss–Newton when JᵀJ is singular or the linearization is too aggressive.",
-  explanation:
-    "Levenberg–Marquardt adds λI to JᵀJ, interpolating between gradient descent (large λ) and Gauss–Newton (small λ). λ adapts from trial-step acceptance on the nonlinear least-squares objective.",
+  purposeTex:
+    "\\min \\tfrac12\\|\\mathbf{r}(\\mathbf{x})\\|^2 \\quad\\text{with Levenberg–Marquardt damping}",
+  explanationTex:
+    "(\\mathbf{J}^\\top\\mathbf{J} + \\lambda \\mathbf{I})\\,\\Delta\\mathbf{x} = -\\mathbf{J}^\\top\\mathbf{r}",
   references: [
-    "Levenberg (1944); Marquardt (1963)",
-    "Nocedal & Wright, §10.3–10.4",
-    "Moré (1978), trust-region LM analysis",
+    {
+      href: "https://doi.org/10.1137/0706016",
+      label: "Levenberg (1944); Marquardt (1963)",
+    },
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, §10.3–10.4",
+    },
+    {
+      href: "https://doi.org/10.1137/0706016",
+      label: "Moré (1978), trust-region LM analysis",
+    },
   ],
 };
 

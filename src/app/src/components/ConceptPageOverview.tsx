@@ -1,7 +1,14 @@
+import { MathBlock } from "./MathBlock";
+
+export interface ConceptReference {
+  href: string;
+  label: string;
+}
+
 export interface ConceptOverview {
-  purpose: string;
-  explanation: string;
-  references: readonly string[];
+  purposeTex: string;
+  explanationTex: string;
+  references: readonly ConceptReference[];
 }
 
 export function ConceptPageOverview({
@@ -17,17 +24,29 @@ export function ConceptPageOverview({
       aria-label={`${title} overview`}
     >
       <h2 className="text-lg font-medium text-white">{title}</h2>
-      <div className="mt-4 space-y-3">
-        <p>
-          <span className="font-medium text-slate-300">Purpose. </span>
-          {overview.purpose}
-        </p>
-        <p>{overview.explanation}</p>
+      <div className="mt-4 space-y-4">
+        <div>
+          <p className="mb-2 font-medium text-slate-300">Purpose.</p>
+          <MathBlock tex={overview.purposeTex} />
+        </div>
+        <div>
+          <p className="mb-2 font-medium text-slate-300">Update</p>
+          <MathBlock tex={overview.explanationTex} />
+        </div>
         <div>
           <p className="font-medium text-slate-300">References</p>
-          <ul className="mt-1 list-inside list-disc space-y-0.5">
+          <ul className="mt-2 list-inside list-disc space-y-1">
             {overview.references.map((ref) => (
-              <li key={ref}>{ref}</li>
+              <li key={ref.href}>
+                <a
+                  href={ref.href}
+                  className="text-emerald-400 underline decoration-emerald-500/40 underline-offset-2 hover:text-emerald-300"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {ref.label}
+                </a>
+              </li>
             ))}
           </ul>
         </div>

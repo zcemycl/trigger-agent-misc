@@ -19,6 +19,12 @@
 - Run relevant tests before finishing.
 - Report test failures honestly.
 
+## GitHub Pages app (`src/app`)
+
+- Prefer layout (equations, charts, tables, controls) over prose.
+- Avoid redundant secondary labels and description paragraphs under headings; sidebar chapter titles duplicate the header chapter switcher.
+- Keep control labels minimal (symbols such as η, β, α where they match the math).
+
 ## Git
 
 - Work only on the assigned feature branch.

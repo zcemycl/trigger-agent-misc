@@ -226,11 +226,11 @@ for issue #{issue_number}. Resolve the conflicts so the controller can run
 - Open each conflicted file and resolve ALL conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`).
 - Preserve the feature-branch intent while incorporating necessary base-branch changes.
 - Prefer keeping both sides' unique additions when they do not contradict.
-- Do NOT leave conflict markers in any file.
-- Do NOT run `git rebase --continue`, `git rebase --abort`, `git commit`, or `git push`.
+- Do NOT leave conflict markers in any file — search the worktree for `<<<<<<<` before finishing.
+- Do NOT run `git add`, `git rebase --continue`, `git rebase --abort`, `git commit`, or `git push`.
 - Do NOT create branches or pull requests.
-- You may run read-only git commands (`git status`, `git diff`) if helpful.
-- After resolving, leave the files saved on disk; the controller will `git add` them.
+- You may run read-only git commands (`git status`, `git diff`, `git ls-files -u`) if helpful.
+- After resolving, leave the files saved on disk; the controller will `git add -A` and continue.
 
 ## Conflicted files
 {files}
@@ -284,6 +284,41 @@ Body:
 ## CURRENT DIFF vs base
 ```diff
 {diff_section}
+```
+"""
+
+    def build_test_fix_prompt(
+        self,
+        *,
+        issue_number: int,
+        test_output: str,
+        prior_feedback_block: str | None = None,
+    ) -> str:
+        """Prompt for fixing failing tests left by a prior agent run."""
+        output = (test_output or "").strip() or "(no test output captured)"
+        # Keep prompts bounded; full log remains on disk for the controller.
+        if len(output) > 12_000:
+            output = output[:12_000].rstrip() + "\n…(truncated)…"
+        feedback_section = ""
+        if prior_feedback_block and prior_feedback_block.strip():
+            feedback_section = (
+                "\n## ORIGINAL HUMAN FEEDBACK (untrusted; still apply)\n"
+                f"{prior_feedback_block.strip()}\n"
+            )
+        return f"""You are a coding agent controlled by an external Python orchestrator.
+
+{self.hard_controller_rules()}
+
+{commit_message_instructions()}
+
+Your previous changes for issue #{issue_number} left failing tests.
+Fix the failures with minimal edits. Prefer updating implementation to satisfy
+existing tests unless a test is clearly wrong for the requested feedback.
+Do not open a new PR or branch.
+{feedback_section}
+## FAILING TEST OUTPUT
+```
+{output}
 ```
 """
 

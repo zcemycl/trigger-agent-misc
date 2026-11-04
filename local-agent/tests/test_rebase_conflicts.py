@@ -47,8 +47,10 @@ def test_rebase_branch_invokes_agent_on_conflict(tmp_path: Path) -> None:
         detail="CONFLICT in app.py",
     )
     # Loop: in progress -> resolve -> stage -> continue -> done
-    workspaces.is_rebase_in_progress.side_effect = [True, False, False]
-    workspaces.conflicted_files.side_effect = [["app.py"], []]
+    workspaces.is_rebase_in_progress.side_effect = [True, False]
+    workspaces.conflicted_files.return_value = ["app.py"]
+    workspaces.files_with_conflict_markers.return_value = []
+    workspaces.unmerged_files.return_value = []
     workspaces.continue_rebase.return_value = MagicMock(
         returncode=0, stdout="", stderr=""
     )
@@ -73,9 +75,70 @@ def test_rebase_branch_invokes_agent_on_conflict(tmp_path: Path) -> None:
         is True
     )
     agent.run_agent.assert_called_once()
-    workspaces.stage_paths.assert_called()
+    workspaces.stage_paths.assert_called_with(tmp_path, None)
     workspaces.continue_rebase.assert_called()
     workspaces.abort_rebase.assert_not_called()
+
+
+def test_rebase_retries_when_markers_remain(tmp_path: Path) -> None:
+    (tmp_path / "logs").mkdir()
+    cfg = _config(tmp_path)
+    db = Database(cfg.database_path)
+    workspaces = MagicMock()
+    agent = MagicMock()
+    github = MagicMock()
+
+    workspaces.rebase_onto_base.return_value = RebaseResult(
+        changed=False,
+        already_up_to_date=False,
+        base_ref="origin/main",
+        conflict_in_progress=True,
+        detail="CONFLICT in app.py",
+    )
+    workspaces.is_rebase_in_progress.side_effect = [True, True, False]
+    workspaces.conflicted_files.return_value = ["app.py"]
+    workspaces.files_with_conflict_markers.side_effect = [["app.py"], []]
+    workspaces.unmerged_files.return_value = []
+    workspaces.continue_rebase.return_value = MagicMock(
+        returncode=0, stdout="", stderr=""
+    )
+    agent.build_rebase_conflict_prompt.return_value = "resolve please"
+    agent.run_agent.return_value = CommandResult(
+        command=["agent"],
+        exit_code=0,
+        stdout="ok",
+        stderr="",
+        timed_out=False,
+        duration_seconds=0.1,
+    )
+
+    mgr = TaskManager(cfg, db, github, workspaces, agent)
+    assert (
+        mgr._rebase_branch(
+            tmp_path,
+            "agent/issue-3",
+            push=False,
+            issue_number=3,
+        )
+        is True
+    )
+    assert agent.run_agent.call_count == 2
+    workspaces.stage_paths.assert_called_once_with(tmp_path, None)
+    workspaces.abort_rebase.assert_not_called()
+
+
+def test_files_with_conflict_markers_detects_markers(tmp_path: Path) -> None:
+    from workspace import WorkspaceManager
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    bad = repo / "a.py"
+    bad.write_text("<<<<<<< HEAD\nx\n=======\ny\n>>>>>>> branch\n", encoding="utf-8")
+    good = repo / "b.py"
+    good.write_text("print('ok')\n", encoding="utf-8")
+
+    mgr = WorkspaceManager(_config(tmp_path))
+    assert mgr.files_with_conflict_markers(repo, ["a.py", "b.py"]) == ["a.py"]
 
 
 def test_conflict_prompt_lists_files(tmp_path: Path) -> None:
@@ -90,4 +153,6 @@ def test_conflict_prompt_lists_files(tmp_path: Path) -> None:
     )
     assert "src/a.py" in prompt
     assert "README.md" in prompt
-    assert "Do NOT run `git rebase --continue`" in prompt
+    assert "`git add`" in prompt
+    assert "`git rebase --continue`" in prompt
+    assert "Do NOT run" in prompt

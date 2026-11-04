@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
+from pathlib import Path
 from typing import Optional
 
 from agent_runner import AgentRunner
@@ -634,12 +635,22 @@ class TaskManager:
             # Ensure worktree exists (reuse branch; never create a new PR).
             wt = self.workspaces.ensure_worktree(issue_number)
             # Keep the PR branch current with BASE_BRANCH before applying feedback.
-            self._rebase_branch(
-                wt.path,
-                wt.branch,
-                push=True,
-                issue_number=issue_number,
-            )
+            # If a prior failed feedback left uncommitted WIP, keep it and skip
+            # rebase so the agent can continue fixing instead of hard-failing.
+            if self.workspaces.has_changes(wt.path):
+                logger.info(
+                    "Skipping pre-feedback rebase for issue #%s: dirty worktree "
+                    "(preserving uncommitted agent WIP)",
+                    issue_number,
+                )
+            else:
+                self._rebase_branch(
+                    wt.path,
+                    wt.branch,
+                    push=True,
+                    issue_number=issue_number,
+                )
+            feedback_block = format_feedback_block(events)
             diff_text = self.workspaces.get_diff(wt.path)
             prompt = self.agent_runner.build_feedback_prompt(
                 issue_number=issue_number,
@@ -648,7 +659,7 @@ class TaskManager:
                 pr_number=pr.number,
                 pr_title=pr.title,
                 pr_body=pr.body,
-                feedback_block=format_feedback_block(events),
+                feedback_block=feedback_block,
                 diff_text=diff_text,
             )
             agent_result = self.agent_runner.run_agent(
@@ -666,6 +677,39 @@ class TaskManager:
                 worktree=wt.path,
                 issue_number=issue_number,
             )
+            # Give the agent a few chances to fix test failures in-session before
+            # marking the feedback batch failed (which leaves a dirty worktree).
+            max_test_fix_rounds = max(0, self.config.max_agent_retries)
+            for fix_round in range(1, max_test_fix_rounds + 1):
+                if not (test_result.timed_out or test_result.exit_code != 0):
+                    break
+                logger.warning(
+                    "Feedback tests failed for issue #%s; agent fix round %s/%s. Log: %s",
+                    issue_number,
+                    fix_round,
+                    max_test_fix_rounds,
+                    test_result.log_path,
+                )
+                fix_prompt = self.agent_runner.build_test_fix_prompt(
+                    issue_number=issue_number,
+                    test_output=self._test_output_for_prompt(test_result),
+                    prior_feedback_block=feedback_block,
+                )
+                fix_result = self.agent_runner.run_agent(
+                    worktree=wt.path,
+                    prompt=fix_prompt,
+                    issue_number=issue_number,
+                )
+                if fix_result.timed_out or fix_result.exit_code != 0:
+                    raise RuntimeError(
+                        f"Feedback test-fix agent failed "
+                        f"(exit={fix_result.exit_code}, timeout={fix_result.timed_out}). "
+                        f"Log: {fix_result.log_path}"
+                    )
+                test_result = self.agent_runner.run_tests(
+                    worktree=wt.path,
+                    issue_number=issue_number,
+                )
             if test_result.timed_out or test_result.exit_code != 0:
                 raise RuntimeError(
                     f"Feedback tests failed (exit={test_result.exit_code}, "
@@ -753,6 +797,21 @@ class TaskManager:
                 )
             self._fail_task(issue_number, err)
 
+    @staticmethod
+    def _test_output_for_prompt(test_result) -> str:
+        """Prefer on-disk test log; fall back to captured stdout/stderr."""
+        if test_result.log_path is not None:
+            try:
+                return Path(test_result.log_path).read_text(encoding="utf-8")
+            except OSError:
+                pass
+        parts = []
+        if test_result.stdout:
+            parts.append(test_result.stdout)
+        if test_result.stderr:
+            parts.append(test_result.stderr)
+        return "\n".join(parts)
+
     def _rebase_branch(
         self,
         worktree_path,
@@ -811,6 +870,8 @@ class TaskManager:
 
         worktree = Path(worktree_path)
         last_detail = detail
+        # Remember paths when git stops listing unmerged files but continue still fails.
+        hint_paths: list[str] = []
         for round_idx in range(1, max_rounds + 1):
             if not self.workspaces.is_rebase_in_progress(worktree):
                 logger.info(
@@ -820,24 +881,26 @@ class TaskManager:
                 return
 
             conflicted = self.workspaces.conflicted_files(worktree)
+            if not conflicted and hint_paths:
+                conflicted = list(hint_paths)
             if not conflicted:
-                # Sometimes only the continue step is needed (e.g. empty commit).
+                # No known conflicts — try continue (e.g. empty commit).
                 cont = self.workspaces.continue_rebase(worktree)
+                last_detail = (cont.stderr or cont.stdout or last_detail).strip()
                 if cont.returncode == 0 and not self.workspaces.is_rebase_in_progress(
                     worktree
                 ):
                     return
-                last_detail = (cont.stderr or cont.stdout or last_detail).strip()
-                if self.workspaces.is_rebase_in_progress(worktree):
-                    conflicted = self.workspaces.conflicted_files(worktree)
-                if not conflicted and cont.returncode != 0:
+                conflicted = self.workspaces.conflicted_files(worktree)
+                if not conflicted and hint_paths:
+                    conflicted = list(hint_paths)
+                if not conflicted:
                     self.workspaces.abort_rebase(worktree)
                     raise RuntimeError(
-                        f"rebase --continue failed without conflict files: {last_detail}"
+                        f"rebase --continue failed with no conflict paths: {last_detail}"
                     )
-                if not conflicted:
-                    continue
 
+            hint_paths = list(conflicted)
             logger.info(
                 "Resolving rebase conflicts for issue #%s (round %s): %s",
                 issue_number,
@@ -862,15 +925,40 @@ class TaskManager:
                     f"timeout={agent_result.timed_out}). Log: {agent_result.log_path}"
                 )
 
-            # Ensure agent did not leave markers; still stage and continue.
-            self.workspaces.stage_paths(worktree, conflicted)
-            remaining = self.workspaces.conflicted_files(worktree)
-            if remaining:
-                self.workspaces.abort_rebase(worktree)
-                raise RuntimeError(
-                    "Conflict markers remain after agent resolution: "
-                    + ", ".join(remaining)
+            # Never stage while conflict markers remain — that would "resolve" bad content.
+            markers = self.workspaces.files_with_conflict_markers(
+                worktree, conflicted
+            )
+            if markers:
+                hint_paths = list(markers)
+                last_detail = (
+                    "Agent left conflict markers; retrying. "
+                    f"markers={markers}"
                 )
+                logger.warning(
+                    "Issue #%s conflict round %s incomplete: %s",
+                    issue_number,
+                    round_idx,
+                    last_detail,
+                )
+                continue
+
+            # Stage everything so deletions / renames clear unmerged index stages.
+            self.workspaces.stage_paths(worktree, None)
+            remaining = self.workspaces.unmerged_files(worktree)
+            if remaining:
+                hint_paths = list(remaining)
+                last_detail = (
+                    "Unmerged paths remain after staging; retrying. "
+                    f"unmerged={remaining}"
+                )
+                logger.warning(
+                    "Issue #%s conflict round %s incomplete: %s",
+                    issue_number,
+                    round_idx,
+                    last_detail,
+                )
+                continue
 
             cont = self.workspaces.continue_rebase(worktree)
             last_detail = (cont.stderr or cont.stdout or "").strip()
@@ -883,10 +971,26 @@ class TaskManager:
                     round_idx,
                 )
                 return
-            if not self.workspaces.is_rebase_in_progress(worktree) and cont.returncode != 0:
+
+            if not self.workspaces.is_rebase_in_progress(worktree):
                 self.workspaces.abort_rebase(worktree)
                 raise RuntimeError(f"rebase --continue failed: {last_detail}")
-            # else: another commit in the rebase hit conflicts — loop
+
+            # Continue failed or next commit conflicted — loop with refreshed paths.
+            still = self.workspaces.conflicted_files(worktree)
+            if still:
+                hint_paths = list(still)
+                last_detail = (
+                    f"After rebase --continue, still conflicted: {still}. "
+                    f"git: {last_detail}"
+                )
+                continue
+            if cont.returncode != 0:
+                last_detail = (
+                    "rebase --continue reported unresolved conflicts; "
+                    f"retrying agent on {conflicted}. git: {last_detail}"
+                )
+                continue
 
         self.workspaces.abort_rebase(worktree)
         raise RuntimeError(

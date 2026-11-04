@@ -431,13 +431,76 @@ class WorkspaceManager:
             worktree, "rebase-apply"
         ).exists()
 
+    def unmerged_files(self, worktree: Path) -> list[str]:
+        """Paths with unmerged index stages (`git ls-files -u`)."""
+        result = self._git(["ls-files", "-u"], cwd=worktree, check=False)
+        paths: set[str] = set()
+        for line in result.stdout.splitlines():
+            if "\t" not in line:
+                continue
+            paths.add(line.split("\t", 1)[1].strip())
+        return sorted(paths)
+
     def conflicted_files(self, worktree: Path) -> list[str]:
-        result = self._git(
-            ["diff", "--name-only", "--diff-filter=U"],
-            cwd=worktree,
-            check=False,
-        )
-        return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        """
+        Files still needing conflict resolution.
+
+        Prefer unmerged index entries; also include working-tree files that still
+        contain conflict markers (agent may have left markers after a partial fix).
+        """
+        paths = set(self.unmerged_files(worktree))
+        if not paths:
+            result = self._git(
+                ["diff", "--name-only", "--diff-filter=U"],
+                cwd=worktree,
+                check=False,
+            )
+            paths.update(
+                line.strip()
+                for line in result.stdout.splitlines()
+                if line.strip()
+            )
+        paths.update(self.files_with_conflict_markers(worktree, sorted(paths) or None))
+        return sorted(paths)
+
+    def files_with_conflict_markers(
+        self,
+        worktree: Path,
+        paths: list[str] | None = None,
+    ) -> list[str]:
+        """Return paths whose contents still include Git conflict markers."""
+        candidates = paths
+        if candidates is None:
+            # Limit scan to files touched in the rebase / working tree.
+            names = self._git(
+                ["diff", "--name-only", "--diff-filter=ACDMRUXB", "HEAD"],
+                cwd=worktree,
+                check=False,
+            )
+            staged = self._git(
+                ["diff", "--cached", "--name-only"],
+                cwd=worktree,
+                check=False,
+            )
+            candidates = sorted(
+                {
+                    *(line.strip() for line in names.stdout.splitlines() if line.strip()),
+                    *(line.strip() for line in staged.stdout.splitlines() if line.strip()),
+                    *self.unmerged_files(worktree),
+                }
+            )
+        marked: list[str] = []
+        for rel in candidates:
+            file_path = worktree / rel
+            if not file_path.is_file():
+                continue
+            try:
+                text = file_path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if "<<<<<<<" in text and ">>>>>>>" in text:
+                marked.append(rel)
+        return marked
 
     def abort_rebase(self, worktree: Path) -> None:
         if self.is_rebase_in_progress(worktree):

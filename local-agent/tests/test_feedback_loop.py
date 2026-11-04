@@ -165,6 +165,93 @@ def test_process_pr_comments_noop_without_trusted_users(tmp_path: Path) -> None:
     github.list_issue_comments.assert_not_called()
 
 
+def test_feedback_skips_rebase_when_dirty_and_retries_tests(tmp_path: Path) -> None:
+    cfg = _config(tmp_path, batch_seconds=0)
+    (cfg.log_dir).mkdir(parents=True, exist_ok=True)
+    db = Database(cfg.database_path)
+    db.create_task(
+        issue_number=11,
+        branch="agent/issue-11",
+        workspace=str(tmp_path / "wt"),
+        status="failed",
+    )
+    db.update_task(11, pr_number=99, pr_url="https://example.com/pull/99")
+    db.insert_comment_event(
+        comment_id="issue_comment:1",
+        pr_number=99,
+        comment_type="issue_comment",
+        author="alice",
+        body="Please fix the naming",
+        status="failed",
+    )
+
+    github = MagicMock()
+    github.get_authenticated_user.return_value = "agent-user"
+    github.get_pull_request.return_value = PullRequest(
+        number=99,
+        title="PR title",
+        body="PR body",
+        state="open",
+        url="https://example.com/pull/99",
+        merged=False,
+        head_ref="agent/issue-11",
+        base_ref="main",
+    )
+    github.get_issue.return_value = Issue(
+        number=11,
+        title="Issue title",
+        body="Issue body",
+        labels=["agent:failed"],
+        author="alice",
+        state="open",
+        url="https://example.com/issues/11",
+    )
+    github.list_issue_comments.return_value = []
+    github.list_review_comments.return_value = []
+    github.list_reviews.return_value = []
+
+    workspaces = MagicMock()
+    workspaces.ensure_worktree.return_value = WorktreeInfo(
+        issue_number=11,
+        branch="agent/issue-11",
+        path=tmp_path / "wt",
+    )
+    workspaces.has_changes.return_value = True
+    workspaces.get_diff.return_value = "diff --git a/app.py"
+    workspaces.commit_all.return_value = True
+
+    fail_tests = CommandResult(
+        command=["pytest"],
+        exit_code=1,
+        stdout="FAILED tests/test_x.py",
+        stderr="",
+        timed_out=False,
+        duration_seconds=0.1,
+        log_path=cfg.log_dir / "fail.log",
+    )
+    (cfg.log_dir / "fail.log").write_text("FAILED tests/test_x.py\n", encoding="utf-8")
+
+    agent = MagicMock()
+    agent.build_feedback_prompt.return_value = "feedback prompt"
+    agent.build_test_fix_prompt.return_value = "fix tests prompt"
+    agent.run_agent.return_value = _ok()
+    agent.run_tests.side_effect = [fail_tests, _ok()]
+
+    mgr = TaskManager(cfg, db, github, workspaces, agent)
+    mgr.process_pr_comments()
+    mgr.shutdown(wait=True)
+
+    # Pre-feedback rebase skipped (dirty); only the post-commit rebase runs.
+    workspaces.rebase_onto_base.assert_called_once()
+    workspaces.has_changes.assert_called()
+    assert agent.build_test_fix_prompt.called
+    assert agent.run_agent.call_count == 2
+    assert agent.run_tests.call_count == 2
+    events = db.list_comment_events(pr_number=99)
+    assert all(e.status == "completed" for e in events)
+    assert db.get_task(11).status == "review_pending"
+
+
 def test_batch_not_enqueued_before_window(tmp_path: Path) -> None:
     cfg = _config(tmp_path, batch_seconds=15)
     db = Database(cfg.database_path)

@@ -13,12 +13,16 @@ interface OptimizationStepTableProps {
   steps: OptimizationStepRow[];
   maxRows?: number;
   caption?: string;
+  highlightedStep?: number | null;
+  onHighlightedStepChange?: (step: number | null) => void;
 }
 
 export function OptimizationStepTable({
   steps,
   maxRows = 12,
   caption = "Step-by-step iterations",
+  highlightedStep = null,
+  onHighlightedStepChange,
 }: OptimizationStepTableProps) {
   if (steps.length === 0) {
     return null;
@@ -55,7 +59,19 @@ export function OptimizationStepTable({
         </thead>
         <tbody className="divide-y divide-slate-800 text-slate-300">
           {visible.map((row) => (
-            <tr key={row.iteration} className="hover:bg-slate-800/40">
+            <tr
+              key={row.iteration}
+              className={`transition ${
+                highlightedStep === row.iteration
+                  ? "bg-emerald-500/15 ring-1 ring-inset ring-emerald-500/40"
+                  : "hover:bg-slate-800/40"
+              }`}
+              onMouseEnter={() => onHighlightedStepChange?.(row.iteration)}
+              onMouseLeave={() => onHighlightedStepChange?.(null)}
+              onFocus={() => onHighlightedStepChange?.(row.iteration)}
+              onBlur={() => onHighlightedStepChange?.(null)}
+              tabIndex={onHighlightedStepChange ? 0 : undefined}
+            >
               <td className="px-3 py-2 font-mono text-slate-400">
                 {row.iteration}
               </td>

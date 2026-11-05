@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { GradientMethodConcepts } from "./components/GradientMethodConcepts";
 import { LineSearchConcepts } from "./components/LineSearchConcepts";
+import { SecondOrderConcepts } from "./components/SecondOrderConcepts";
 
-type Chapter = "line-search" | "gradient-methods";
+type Chapter = "line-search" | "gradient-methods" | "second-order";
 
 export default function App() {
   const [chapter, setChapter] = useState<Chapter>("gradient-methods");
@@ -45,6 +46,18 @@ export default function App() {
               >
                 Gradient methods
               </button>
+              <button
+                type="button"
+                onClick={() => setChapter("second-order")}
+                aria-current={chapter === "second-order" ? "page" : undefined}
+                className={`rounded-md px-3 py-1.5 text-sm transition ${
+                  chapter === "second-order"
+                    ? "bg-emerald-500/20 font-medium text-emerald-200"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                Second-order
+              </button>
             </nav>
             <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-300">
               trigger-agent-misc
@@ -55,8 +68,10 @@ export default function App() {
       <main className="mx-auto max-w-6xl px-6 py-10">
         {chapter === "line-search" ? (
           <LineSearchConcepts />
-        ) : (
+        ) : chapter === "gradient-methods" ? (
           <GradientMethodConcepts />
+        ) : (
+          <SecondOrderConcepts />
         )}
       </main>
     </div>

@@ -12,11 +12,18 @@ import {
   wolfeCurvature,
 } from "../lineSearch";
 import {
-  QUADRATIC_PHI0,
-  QUADRATIC_PHI_PRIME0,
-  quadraticPhi,
-  quadraticPhiPrime,
-} from "../quadratic";
+  ConceptChapterSidebar,
+  type ConceptViewMode,
+} from "./ConceptChapterSidebar";
+import {
+  DemoNoiseControls,
+  DemoNoiseProvider,
+  useNoisyQuadraticRay,
+} from "./DemoNoise";
+import {
+  ConceptPageOverview,
+  type ConceptOverview,
+} from "./ConceptPageOverview";
 import { EquationWithWhere } from "./EquationWithWhere";
 import { MathBlock } from "./MathBlock";
 import { PhiChart } from "./PhiChart";
@@ -56,10 +63,11 @@ function StatusBadge({ ok, label }: { ok: boolean; label: string }) {
 }
 
 function ExactLineSearchDemo() {
+  const { phi } = useNoisyQuadraticRay();
   const [bracketHi, setBracketHi] = useState(2);
   const result = useMemo(
-    () => exactLineSearch(quadraticPhi, { a: 0, b: bracketHi }),
-    [bracketHi],
+    () => exactLineSearch(phi, { a: 0, b: bracketHi }),
+    [bracketHi, phi],
   );
 
   return (
@@ -104,7 +112,7 @@ function ExactLineSearchDemo() {
         />
       </label>
       <PhiChart
-        phi={quadraticPhi}
+        phi={phi}
         bracket={{ a: 0, b: bracketHi }}
         markers={[
           {
@@ -123,14 +131,15 @@ function ExactLineSearchDemo() {
 }
 
 function BacktrackingDemo() {
+  const { phi, phi0, phiPrime0 } = useNoisyQuadraticRay();
   const [alpha0, setAlpha0] = useState(1.5);
   const trials = useMemo(
-    () => backtrackingTrialAlphas(quadraticPhi, QUADRATIC_PHI_PRIME0, alpha0),
-    [alpha0],
+    () => backtrackingTrialAlphas(phi, phiPrime0, alpha0),
+    [alpha0, phi, phiPrime0],
   );
   const result = useMemo(
-    () => backtrackingArmijo(quadraticPhi, QUADRATIC_PHI_PRIME0, { alpha0 }),
-    [alpha0],
+    () => backtrackingArmijo(phi, phiPrime0, { alpha0 }),
+    [alpha0, phi, phiPrime0],
   );
 
   return (
@@ -156,7 +165,7 @@ function BacktrackingDemo() {
         />
       </label>
       <PhiChart
-        phi={quadraticPhi}
+        phi={phi}
         markers={trials.map((a, i) => ({
           alpha: a,
           label:
@@ -166,8 +175,8 @@ function BacktrackingDemo() {
           color: i === trials.length - 1 ? "#34d399" : "#f87171",
         }))}
         armijoLineAtAlpha={result.alpha}
-        phi0={QUADRATIC_PHI0}
-        phiPrime0={QUADRATIC_PHI_PRIME0}
+        phi0={phi0}
+        phiPrime0={phiPrime0}
       />
       <p className="font-mono text-sm text-emerald-300">
         α = {result.alpha.toFixed(4)} · {result.iterations}
@@ -177,14 +186,10 @@ function BacktrackingDemo() {
 }
 
 function ArmijoDemo() {
+  const { phi, phi0, phiPrime0 } = useNoisyQuadraticRay();
   const [alpha, setAlpha] = useState(0.5);
-  const phiA = quadraticPhi(alpha);
-  const holds = armijoSufficientDecrease(
-    QUADRATIC_PHI0,
-    phiA,
-    alpha,
-    QUADRATIC_PHI_PRIME0,
-  );
+  const phiA = phi(alpha);
+  const holds = armijoSufficientDecrease(phi0, phiA, alpha, phiPrime0);
 
   return (
     <Section
@@ -224,10 +229,10 @@ function ArmijoDemo() {
         />
       </label>
       <PhiChart
-        phi={quadraticPhi}
+        phi={phi}
         armijoLineAtAlpha={alpha}
-        phi0={QUADRATIC_PHI0}
-        phiPrime0={QUADRATIC_PHI_PRIME0}
+        phi0={phi0}
+        phiPrime0={phiPrime0}
         markers={[
           {
             alpha,
@@ -242,22 +247,15 @@ function ArmijoDemo() {
 }
 
 function WolfeDemo() {
+  const { phi, phiPrime, phi0, phiPrime0 } = useNoisyQuadraticRay();
   const [alpha, setAlpha] = useState(1);
-  const phiA = quadraticPhi(alpha);
-  const phiPA = quadraticPhiPrime(alpha);
-  const armijo = armijoSufficientDecrease(
-    QUADRATIC_PHI0,
-    phiA,
-    alpha,
-    QUADRATIC_PHI_PRIME0,
-  );
-  const curvature = wolfeCurvature(phiPA, QUADRATIC_PHI_PRIME0);
+  const phiA = phi(alpha);
+  const phiPA = phiPrime(alpha);
+  const armijo = armijoSufficientDecrease(phi0, phiA, alpha, phiPrime0);
+  const curvature = wolfeCurvature(phiPA, phiPrime0);
   const run = useMemo(
-    () =>
-      lineSearchWolfe(quadraticPhi, quadraticPhiPrime, QUADRATIC_PHI_PRIME0, {
-        alpha0: 1,
-      }),
-    [],
+    () => lineSearchWolfe(phi, phiPrime, phiPrime0, { alpha0: 1 }),
+    [phi, phiPrime, phiPrime0],
   );
 
   return (
@@ -288,7 +286,7 @@ function WolfeDemo() {
         />
       </label>
       <PhiChart
-        phi={quadraticPhi}
+        phi={phi}
         markers={[
           {
             alpha,
@@ -307,32 +305,21 @@ function WolfeDemo() {
         <StatusBadge ok={curvature} label="Wolfe curvature" />
       </div>
       <p className="font-mono text-sm text-emerald-300">
-        α = {run.alpha.toFixed(4)} · φ′(α) ={" "}
-        {quadraticPhiPrime(run.alpha).toFixed(4)}
+        α = {run.alpha.toFixed(4)} · φ′(α) = {phiPrime(run.alpha).toFixed(4)}
       </p>
     </Section>
   );
 }
 
 function StrongWolfeDemo() {
+  const { phi, phiPrime, phi0, phiPrime0 } = useNoisyQuadraticRay();
   const [alpha, setAlpha] = useState(0.8);
-  const phiPA = quadraticPhiPrime(alpha);
-  const armijo = armijoSufficientDecrease(
-    QUADRATIC_PHI0,
-    quadraticPhi(alpha),
-    alpha,
-    QUADRATIC_PHI_PRIME0,
-  );
-  const strong = strongWolfeCurvature(phiPA, QUADRATIC_PHI_PRIME0);
+  const phiPA = phiPrime(alpha);
+  const armijo = armijoSufficientDecrease(phi0, phi(alpha), alpha, phiPrime0);
+  const strong = strongWolfeCurvature(phiPA, phiPrime0);
   const run = useMemo(
-    () =>
-      lineSearchStrongWolfe(
-        quadraticPhi,
-        quadraticPhiPrime,
-        QUADRATIC_PHI_PRIME0,
-        { alpha0: 1 },
-      ),
-    [],
+    () => lineSearchStrongWolfe(phi, phiPrime, phiPrime0, { alpha0: 1 }),
+    [phi, phiPrime, phiPrime0],
   );
 
   return (
@@ -363,7 +350,7 @@ function StrongWolfeDemo() {
         />
       </label>
       <PhiChart
-        phi={quadraticPhi}
+        phi={phi}
         markers={[
           { alpha, label: "trial", color: strong ? "#34d399" : "#f87171" },
           { alpha: run.alpha, label: "strong Wolfe LS", color: "#818cf8" },
@@ -375,29 +362,23 @@ function StrongWolfeDemo() {
       </div>
       <p className="font-mono text-sm text-emerald-300">
         |φ′(α)| = {Math.abs(phiPA).toFixed(4)} · c₂|φ′(0)| ={" "}
-        {(0.9 * Math.abs(QUADRATIC_PHI_PRIME0)).toFixed(4)}
+        {(0.9 * Math.abs(phiPrime0)).toFixed(4)}
       </p>
     </Section>
   );
 }
 
 function GoldsteinDemo() {
+  const { phi, phi0, phiPrime0 } = useNoisyQuadraticRay();
   const [alpha, setAlpha] = useState(0.35);
   const c = 0.1;
-  const phiA = quadraticPhi(alpha);
-  const lower = QUADRATIC_PHI0 + (1 - c) * alpha * QUADRATIC_PHI_PRIME0;
-  const upper = QUADRATIC_PHI0 + c * alpha * QUADRATIC_PHI_PRIME0;
-  const holds = goldsteinConditions(
-    QUADRATIC_PHI0,
-    phiA,
-    alpha,
-    QUADRATIC_PHI_PRIME0,
-    c,
-  );
+  const phiA = phi(alpha);
+  const lower = phi0 + (1 - c) * alpha * phiPrime0;
+  const upper = phi0 + c * alpha * phiPrime0;
+  const holds = goldsteinConditions(phi0, phiA, alpha, phiPrime0, c);
   const run = useMemo(
-    () =>
-      lineSearchGoldstein(quadraticPhi, QUADRATIC_PHI_PRIME0, { alpha0: 1 }),
-    [],
+    () => lineSearchGoldstein(phi, phiPrime0, { alpha0: 1 }),
+    [phi, phiPrime0],
   );
 
   return (
@@ -427,7 +408,7 @@ function GoldsteinDemo() {
         />
       </label>
       <PhiChart
-        phi={quadraticPhi}
+        phi={phi}
         band={{
           alpha,
           yLower: lower,
@@ -450,28 +431,152 @@ function GoldsteinDemo() {
 
 export const LINE_SEARCH_CHAPTER = "Line search";
 
+const EXACT_LS_OVERVIEW: ConceptOverview = {
+  purposeTex:
+    "\\varphi(\\alpha) = f(\\mathbf{x} + \\alpha\\mathbf{p}) \\quad\\text{minimize over } \\alpha",
+  explanationTex:
+    "\\alpha^\\star \\in \\arg\\min_{\\alpha>0} \\varphi(\\alpha)",
+  references: [
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, Numerical Optimization, §3.1",
+    },
+    {
+      href: "https://web.stanford.edu/~boyd/cvxbook/",
+      label: "Boyd & Vandenberghe, Convex Optimization, §9.2",
+    },
+  ],
+};
+
+const BACKTRACKING_OVERVIEW: ConceptOverview = {
+  purposeTex:
+    "\\text{Find } \\alpha>0 \\text{ by shrinking until a decrease test passes}",
+  explanationTex:
+    "\\alpha \\leftarrow \\rho\\alpha \\quad\\text{while } \\varphi(\\alpha) \\text{ fails the test, } \\rho \\in (0,1)",
+  references: [
+    {
+      href: "https://doi.org/10.1137/0706016",
+      label: "Armijo (1966), backtracking for Newton methods",
+    },
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, §3.1–3.2",
+    },
+  ],
+};
+
+const ARMIJO_OVERVIEW: ConceptOverview = {
+  purposeTex: "\\text{Sufficient decrease along the search direction}",
+  explanationTex:
+    "\\varphi(\\alpha) \\le \\varphi(0) + c_1 \\alpha \\varphi'(0),\\quad c_1 \\in (0,1)",
+  references: [
+    {
+      href: "https://doi.org/10.1137/0706016",
+      label: "Armijo (1966)",
+    },
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, §3.1",
+    },
+  ],
+};
+
+const WOLFE_OVERVIEW: ConceptOverview = {
+  purposeTex:
+    "\\text{Pair decrease with a curvature check on } \\varphi'(\\alpha)",
+  explanationTex:
+    "\\varphi(\\alpha) \\le \\varphi(0) + c_1 \\alpha \\varphi'(0),\\quad \\varphi'(\\alpha) \\ge c_2 \\varphi'(0)",
+  references: [
+    {
+      href: "https://doi.org/10.1137/0706016",
+      label: "Wolfe (1969, 1971)",
+    },
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, §3.1, §6.1",
+    },
+  ],
+};
+
+const STRONG_WOLFE_OVERVIEW: ConceptOverview = {
+  purposeTex:
+    "\\text{Bound the magnitude of the directional derivative at } \\alpha",
+  explanationTex:
+    "|\\varphi'(\\alpha)| \\le c_2 |\\varphi'(0)|,\\quad 0 < c_1 < c_2 < 1",
+  references: [
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, §3.1",
+    },
+    {
+      href: "https://www.netlib.org/minpack/",
+      label: "MINPACK / More–Thuente line search",
+    },
+  ],
+};
+
+const GOLDSTEIN_OVERVIEW: ConceptOverview = {
+  purposeTex:
+    "\\text{Bracket } \\varphi(\\alpha) \\text{ between two linear models at } \\alpha=0",
+  explanationTex:
+    "\\varphi(0) + (1-c)\\alpha\\varphi'(0) \\le \\varphi(\\alpha) \\le \\varphi(0) + c\\alpha\\varphi'(0)",
+  references: [
+    {
+      href: "https://doi.org/10.2307/2286540",
+      label: "Goldstein (1962)",
+    },
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, §3.1",
+    },
+  ],
+};
+
 export const LINE_SEARCH_PAGES = [
-  { id: "exact", title: "Exact line search", Demo: ExactLineSearchDemo },
+  {
+    id: "exact",
+    title: "Exact line search",
+    Demo: ExactLineSearchDemo,
+    overview: EXACT_LS_OVERVIEW,
+  },
   {
     id: "backtracking",
     title: "Backtracking line search",
     Demo: BacktrackingDemo,
+    overview: BACKTRACKING_OVERVIEW,
   },
-  { id: "armijo", title: "Armijo condition", Demo: ArmijoDemo },
-  { id: "wolfe", title: "Wolfe conditions", Demo: WolfeDemo },
+  {
+    id: "armijo",
+    title: "Armijo condition",
+    Demo: ArmijoDemo,
+    overview: ARMIJO_OVERVIEW,
+  },
+  {
+    id: "wolfe",
+    title: "Wolfe conditions",
+    Demo: WolfeDemo,
+    overview: WOLFE_OVERVIEW,
+  },
   {
     id: "strong-wolfe",
     title: "Strong Wolfe conditions",
     Demo: StrongWolfeDemo,
+    overview: STRONG_WOLFE_OVERVIEW,
   },
-  { id: "goldstein", title: "Goldstein conditions", Demo: GoldsteinDemo },
+  {
+    id: "goldstein",
+    title: "Goldstein conditions",
+    Demo: GoldsteinDemo,
+    overview: GOLDSTEIN_OVERVIEW,
+  },
 ] as const;
 
 export type LineSearchPageId = (typeof LINE_SEARCH_PAGES)[number]["id"];
 
 function ConceptIntro() {
   return (
-    <div className="mb-6">
+    <div className="mb-6 space-y-4">
+      <DemoNoiseControls />
       <EquationWithWhere
         where={[
           {
@@ -496,47 +601,51 @@ function ConceptIntro() {
   );
 }
 
-export function LineSearchConcepts({
+function LineSearchConceptsContent({
   initialPageId = "exact",
 }: {
   initialPageId?: LineSearchPageId;
 }) {
   const [activeId, setActiveId] = useState<LineSearchPageId>(initialPageId);
+  const [viewMode, setViewMode] = useState<ConceptViewMode>("demo");
   const activePage =
     LINE_SEARCH_PAGES.find((p) => p.id === activeId) ?? LINE_SEARCH_PAGES[0];
   const ActiveDemo = activePage.Demo;
 
   return (
     <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
-      <aside className="w-full shrink-0 lg:sticky lg:top-6 lg:w-56">
-        <nav
-          className="flex flex-col gap-1"
-          aria-label={`${LINE_SEARCH_CHAPTER} concepts`}
-        >
-          {LINE_SEARCH_PAGES.map((page) => {
-            const isActive = page.id === activeId;
-            return (
-              <button
-                key={page.id}
-                type="button"
-                onClick={() => setActiveId(page.id)}
-                aria-current={isActive ? "page" : undefined}
-                className={`rounded-lg px-3 py-2 text-left text-sm transition ${
-                  isActive
-                    ? "bg-emerald-500/15 font-medium text-emerald-200"
-                    : "text-slate-400 hover:bg-slate-800/80 hover:text-slate-200"
-                }`}
-              >
-                {page.title}
-              </button>
-            );
-          })}
-        </nav>
-      </aside>
+      <ConceptChapterSidebar
+        chapter={LINE_SEARCH_CHAPTER}
+        aria-label={`${LINE_SEARCH_CHAPTER} concepts`}
+        pages={LINE_SEARCH_PAGES}
+        activeId={activeId}
+        onActiveIdChange={setActiveId}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+      />
       <div className="min-w-0 flex-1">
-        <ConceptIntro />
-        <ActiveDemo />
+        {viewMode === "overview" ? (
+          <ConceptPageOverview
+            title={activePage.title}
+            overview={activePage.overview}
+          />
+        ) : (
+          <>
+            <ConceptIntro />
+            <ActiveDemo />
+          </>
+        )}
       </div>
     </div>
+  );
+}
+
+export function LineSearchConcepts(
+  props: { initialPageId?: LineSearchPageId } = {},
+) {
+  return (
+    <DemoNoiseProvider>
+      <LineSearchConceptsContent {...props} />
+    </DemoNoiseProvider>
   );
 }

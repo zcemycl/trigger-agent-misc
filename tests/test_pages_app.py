@@ -147,3 +147,71 @@ def test_app_renders_latex_equations_for_line_search() -> None:
     pkg = json.loads((APP_ROOT / "package.json").read_text(encoding="utf-8"))
     assert "katex" in pkg.get("dependencies", {})
     assert (APP_ROOT / "src" / "components" / "MathBlock.tsx").is_file()
+
+
+def test_second_order_pages_include_where_explanations() -> None:
+    concepts = (APP_ROOT / "src" / "components" / "SecondOrderConcepts.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "EquationWithWhere" in concepts
+    assert (APP_ROOT / "src" / "components" / "EquationWithWhere.tsx").is_file()
+
+
+def test_second_order_pages_include_step_by_step_tables() -> None:
+    concepts = (APP_ROOT / "src" / "components" / "SecondOrderConcepts.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "OptimizationStepTable" in concepts
+    assert concepts.count("OptimizationStepTable") >= 8
+    assert "steps" in (APP_ROOT / "src" / "secondOrder.ts").read_text(encoding="utf-8")
+
+
+def test_gradient_and_second_order_tabs_include_sidebar_overviews() -> None:
+    overview = (APP_ROOT / "src" / "components" / "ConceptPageOverview.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "Purpose." in overview
+    assert "References" in overview
+    for name in ("GradientMethodConcepts.tsx", "SecondOrderConcepts.tsx"):
+        concepts = (APP_ROOT / "src" / "components" / name).read_text(encoding="utf-8")
+        assert "ConceptPageOverview" in concepts
+        assert "overview:" in concepts
+
+
+def test_app_includes_interactive_second_order_demos() -> None:
+    concepts = (APP_ROOT / "src" / "components" / "SecondOrderConcepts.tsx").read_text(
+        encoding="utf-8"
+    )
+    for title in (
+        "Newton's method",
+        "Damped Newton method",
+        "Conjugate gradient",
+        "Quasi-Newton methods",
+        "BFGS",
+        "L-BFGS",
+        "Gauss–Newton",
+        "Levenberg–Marquardt",
+    ):
+        assert title in concepts
+    assert (APP_ROOT / "src" / "secondOrder.ts").is_file()
+    assert "SECOND_ORDER_CHAPTER" in concepts
+    assert "SECOND_ORDER_PAGES" in concepts
+
+
+def test_app_uses_chapter_switcher() -> None:
+    app_tsx = (APP_ROOT / "src" / "App.tsx").read_text(encoding="utf-8")
+    assert "SecondOrderConcepts" in app_tsx
+    assert "Optimization Concepts" in app_tsx
+    assert 'aria-label="Optimization chapters"' in app_tsx
+
+
+def test_optimization_chapters_expose_noise_mode() -> None:
+    for name in (
+        "GradientMethodConcepts.tsx",
+        "LineSearchConcepts.tsx",
+        "SecondOrderConcepts.tsx",
+    ):
+        text = (APP_ROOT / "src" / "components" / name).read_text(encoding="utf-8")
+        assert "DemoNoiseProvider" in text
+        assert "DemoNoiseControls" in text
+    assert (APP_ROOT / "src" / "demoNoise.ts").is_file()

@@ -1,11 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import {
-  FINITE_SUM_OPTIMUM,
-  finiteSumGrad,
-  finiteSumGradAtIndex,
-  finiteSumObjective,
-  SAMPLE_CENTERS,
-} from "../finiteSumQuadratic";
+import { FINITE_SUM_OPTIMUM, SAMPLE_CENTERS } from "../finiteSumQuadratic";
 import {
   formatVector,
   gradientDescent,
@@ -16,6 +10,19 @@ import {
   stochasticGradientDescent,
   type Vector,
 } from "../gradientMethod";
+import {
+  DemoNoiseControls,
+  DemoNoiseProvider,
+  useFiniteSumProblem,
+} from "./DemoNoise";
+import {
+  ConceptChapterSidebar,
+  type ConceptViewMode,
+} from "./ConceptChapterSidebar";
+import {
+  ConceptPageOverview,
+  type ConceptOverview,
+} from "./ConceptPageOverview";
 import { EquationWithWhere, type WhereClause } from "./EquationWithWhere";
 import { MathBlock } from "./MathBlock";
 import { OptimizationStepTable } from "./OptimizationStepTable";
@@ -106,20 +113,24 @@ function LearningRateSlider({
   );
 }
 
-const objective1d = (x: number) => finiteSumObjective([x]);
 const x0 = [3.0];
 const numSamples = SAMPLE_CENTERS.length;
 
 function GradientDescentDemo() {
+  const problem = useFiniteSumProblem();
+  const chartObjective = useMemo(
+    () => (x: number) => problem.objective([x]),
+    [problem],
+  );
   const [lr, setLr] = useState(0.2);
   const result = useMemo(
     () =>
-      gradientDescent(x0, finiteSumObjective, finiteSumGrad, {
+      gradientDescent(x0, problem.objective, problem.grad, {
         learningRate: lr,
         maxIter: 500,
         tol: 1e-8,
       }),
-    [lr],
+    [lr, problem],
   );
   const historyX = result.history.map((v) => v[0]);
 
@@ -133,7 +144,7 @@ function GradientDescentDemo() {
       }
     >
       <LearningRateSlider value={lr} onChange={setLr} />
-      <TrajectoryChart objective={objective1d} history={historyX} />
+      <TrajectoryChart objective={chartObjective} history={historyX} />
       <OptimizationStepTable
         steps={result.steps}
         caption="Gradient descent step-by-step iterations"
@@ -148,17 +159,22 @@ function GradientDescentDemo() {
 }
 
 function SgdDemo() {
+  const problem = useFiniteSumProblem();
+  const chartObjective = useMemo(
+    () => (x: number) => problem.objective([x]),
+    [problem],
+  );
   const [lr, setLr] = useState(0.05);
   const result = useMemo(
     () =>
       stochasticGradientDescent(
         x0,
-        finiteSumObjective,
-        finiteSumGradAtIndex,
+        problem.objective,
+        problem.gradAtIndex,
         numSamples,
         { learningRate: lr, maxIter: 800, tol: 1e-8, seed: 0 },
       ),
-    [lr],
+    [lr, problem],
   );
   const historyX = result.history.map((v) => v[0]);
 
@@ -186,7 +202,7 @@ function SgdDemo() {
       }
     >
       <LearningRateSlider value={lr} onChange={setLr} />
-      <TrajectoryChart objective={objective1d} history={historyX} />
+      <TrajectoryChart objective={chartObjective} history={historyX} />
       <OptimizationStepTable
         steps={result.steps}
         caption="SGD step-by-step iterations"
@@ -201,18 +217,23 @@ function SgdDemo() {
 }
 
 function MinibatchDemo() {
+  const problem = useFiniteSumProblem();
+  const chartObjective = useMemo(
+    () => (x: number) => problem.objective([x]),
+    [problem],
+  );
   const [lr, setLr] = useState(0.1);
   const [batchSize, setBatchSize] = useState(2);
   const result = useMemo(
     () =>
-      minibatchSgd(x0, finiteSumObjective, finiteSumGradAtIndex, numSamples, {
+      minibatchSgd(x0, problem.objective, problem.gradAtIndex, numSamples, {
         learningRate: lr,
         batchSize,
         maxIter: 400,
         tol: 1e-8,
         seed: 1,
       }),
-    [lr, batchSize],
+    [lr, batchSize, problem],
   );
   const historyX = result.history.map((v) => v[0]);
 
@@ -257,7 +278,7 @@ function MinibatchDemo() {
           className="accent-emerald-500"
         />
       </label>
-      <TrajectoryChart objective={objective1d} history={historyX} />
+      <TrajectoryChart objective={chartObjective} history={historyX} />
       <OptimizationStepTable
         steps={result.steps}
         caption="Mini-batch SGD step-by-step iterations"
@@ -272,17 +293,22 @@ function MinibatchDemo() {
 }
 
 function MomentumDemo() {
+  const problem = useFiniteSumProblem();
+  const chartObjective = useMemo(
+    () => (x: number) => problem.objective([x]),
+    [problem],
+  );
   const [lr, setLr] = useState(0.05);
   const [beta, setBeta] = useState(0.9);
   const result = useMemo(
     () =>
-      momentum(x0, finiteSumObjective, finiteSumGrad, {
+      momentum(x0, problem.objective, problem.grad, {
         learningRate: lr,
         beta,
         maxIter: 400,
         tol: 1e-8,
       }),
-    [lr, beta],
+    [lr, beta, problem],
   );
   const historyX = result.history.map((v) => v[0]);
 
@@ -311,7 +337,7 @@ function MomentumDemo() {
           className="accent-emerald-500"
         />
       </label>
-      <TrajectoryChart objective={objective1d} history={historyX} />
+      <TrajectoryChart objective={chartObjective} history={historyX} />
       <OptimizationStepTable
         steps={result.steps}
         caption="Momentum step-by-step iterations"
@@ -326,17 +352,22 @@ function MomentumDemo() {
 }
 
 function NesterovDemo() {
+  const problem = useFiniteSumProblem();
+  const chartObjective = useMemo(
+    () => (x: number) => problem.objective([x]),
+    [problem],
+  );
   const [lr, setLr] = useState(0.05);
   const [beta, setBeta] = useState(0.9);
   const result = useMemo(
     () =>
-      nesterovAcceleratedGradient(x0, finiteSumObjective, finiteSumGrad, {
+      nesterovAcceleratedGradient(x0, problem.objective, problem.grad, {
         learningRate: lr,
         beta,
         maxIter: 400,
         tol: 1e-8,
       }),
-    [lr, beta],
+    [lr, beta, problem],
   );
   const historyX = result.history.map((v) => v[0]);
 
@@ -379,7 +410,7 @@ function NesterovDemo() {
           className="accent-emerald-500"
         />
       </label>
-      <TrajectoryChart objective={objective1d} history={historyX} />
+      <TrajectoryChart objective={chartObjective} history={historyX} />
       <OptimizationStepTable
         steps={result.steps}
         caption="Nesterov accelerated gradient step-by-step iterations"
@@ -394,17 +425,22 @@ function NesterovDemo() {
 }
 
 function HeavyBallDemo() {
+  const problem = useFiniteSumProblem();
+  const chartObjective = useMemo(
+    () => (x: number) => problem.objective([x]),
+    [problem],
+  );
   const [lr, setLr] = useState(0.05);
   const [beta, setBeta] = useState(0.85);
   const result = useMemo(
     () =>
-      heavyBallMethod(x0, finiteSumObjective, finiteSumGrad, {
+      heavyBallMethod(x0, problem.objective, problem.grad, {
         learningRate: lr,
         beta,
         maxIter: 400,
         tol: 1e-8,
       }),
-    [lr, beta],
+    [lr, beta, problem],
   );
   const historyX = result.history.map((v) => v[0]);
 
@@ -441,7 +477,7 @@ function HeavyBallDemo() {
           className="accent-emerald-500"
         />
       </label>
-      <TrajectoryChart objective={objective1d} history={historyX} />
+      <TrajectoryChart objective={chartObjective} history={historyX} />
       <OptimizationStepTable
         steps={result.steps}
         caption="Heavy-ball step-by-step iterations"
@@ -457,17 +493,157 @@ function HeavyBallDemo() {
 
 export const GRADIENT_METHOD_CHAPTER = "Gradient methods";
 
+const GD_OVERVIEW: ConceptOverview = {
+  purposeTex:
+    "\\min_{\\mathbf{x}} f(\\mathbf{x}) \\quad\\text{by first-order descent}",
+  explanationTex:
+    "\\mathbf{x}_{k+1} = \\mathbf{x}_k - \\eta\\,\\nabla f(\\mathbf{x}_k)",
+  references: [
+    {
+      href: "https://en.wikipedia.org/wiki/Gradient_descent",
+      label: "Cauchy (1847), gradient descent",
+    },
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, Numerical Optimization, Ch. 3",
+    },
+    {
+      href: "https://web.stanford.edu/~boyd/cvxbook/",
+      label: "Boyd & Vandenberghe, Convex Optimization, §9.3",
+    },
+  ],
+};
+
+const SGD_OVERVIEW: ConceptOverview = {
+  purposeTex:
+    "\\min_{\\mathbf{x}} \\frac{1}{n}\\sum_{i=1}^n f_i(\\mathbf{x}) \\quad\\text{with cheap noisy gradients}",
+  explanationTex:
+    "\\mathbf{x}_{k+1} = \\mathbf{x}_k - \\eta_k\\,\\nabla f_{i_k}(\\mathbf{x}_k),\\quad i_k \\sim \\mathrm{Unif}\\{1,\\ldots,n\\}",
+  references: [
+    {
+      href: "https://projecteuclid.org/journals/annals-of-mathematical-statistics/volume-22/issue-3/A-Stochastic-Approximation-Method/10.1214/aoms/1177729586.full",
+      label: "Robbins & Monro (1951), stochastic approximation",
+    },
+    {
+      href: "https://doi.org/10.1137/16M1080173",
+      label: "Bottou, Curtis & Nocedal (2018), optimization for ML",
+    },
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, Ch. 8",
+    },
+  ],
+};
+
+const MINIBATCH_OVERVIEW: ConceptOverview = {
+  purposeTex:
+    "\\min_{\\mathbf{x}} \\frac{1}{n}\\sum_{i=1}^n f_i(\\mathbf{x}) \\quad\\text{using a subset of terms per step}",
+  explanationTex:
+    "\\mathbf{x}_{k+1} = \\mathbf{x}_k - \\eta\\,\\frac{1}{|B_k|}\\sum_{i\\in B_k}\\nabla f_i(\\mathbf{x}_k)",
+  references: [
+    {
+      href: "https://arxiv.org/abs/1109.4865",
+      label: "Dekel et al. (2012), mini-batch SGD",
+    },
+    {
+      href: "https://www.deeplearningbook.org/",
+      label: "Goodfellow, Bengio & Courville, Deep Learning, §8.1",
+    },
+  ],
+};
+
+const MOMENTUM_OVERVIEW: ConceptOverview = {
+  purposeTex:
+    "\\min f(\\mathbf{x}) \\quad\\text{with velocity to damp zig-zagging}",
+  explanationTex:
+    "\\mathbf{v}_{k+1} = \\beta\\mathbf{v}_k + \\eta\\nabla f(\\mathbf{x}_k),\\quad \\mathbf{x}_{k+1} = \\mathbf{x}_k - \\mathbf{v}_{k+1}",
+  references: [
+    {
+      href: "https://doi.org/10.1016/0041-5553(64)90130-5",
+      label: "Polyak (1964), heavy ball and momentum",
+    },
+    {
+      href: "https://arxiv.org/abs/1212.0901",
+      label: "Sutskever et al. (2013), momentum in deep learning",
+    },
+    {
+      href: "https://link.springer.com/book/10.1007/978-0-387-40065-5",
+      label: "Nocedal & Wright, Ch. 7",
+    },
+  ],
+};
+
+const NESTEROV_OVERVIEW: ConceptOverview = {
+  purposeTex:
+    "\\min f(\\mathbf{x}) \\quad\\text{with lookahead before the gradient}",
+  explanationTex:
+    "\\mathbf{y}_k = \\mathbf{x}_k - \\beta\\mathbf{v}_k,\\quad \\mathbf{v}_{k+1} = \\beta\\mathbf{v}_k + \\eta\\nabla f(\\mathbf{y}_k)",
+  references: [
+    {
+      href: "https://doi.org/10.1016/0377-0427(88)90025-6",
+      label: "Nesterov (1988), optimal convex methods",
+    },
+    {
+      href: "https://arxiv.org/abs/1212.0901",
+      label: "Sutskever et al. (2013), Nesterov in practice",
+    },
+  ],
+};
+
+const HEAVY_BALL_OVERVIEW: ConceptOverview = {
+  purposeTex:
+    "\\min f(\\mathbf{x}) \\quad\\text{via damped second-order dynamics}",
+  explanationTex:
+    "\\mathbf{x}_{k+1} = \\mathbf{x}_k - \\eta\\nabla f(\\mathbf{x}_k) + \\beta(\\mathbf{x}_k - \\mathbf{x}_{k-1})",
+  references: [
+    {
+      href: "https://doi.org/10.1016/0041-5553(64)90130-5",
+      label: "Polyak (1964), the heavy ball method",
+    },
+    {
+      href: "https://arxiv.org/abs/1609.06845",
+      label: "Lessard, Recht & Packard (2016), IQC analysis",
+    },
+  ],
+};
+
 export const GRADIENT_METHOD_PAGES = [
-  { id: "gd", title: "Gradient descent (GD)", Demo: GradientDescentDemo },
-  { id: "sgd", title: "Stochastic gradient descent (SGD)", Demo: SgdDemo },
-  { id: "minibatch", title: "Mini-batch SGD", Demo: MinibatchDemo },
-  { id: "momentum", title: "Momentum", Demo: MomentumDemo },
+  {
+    id: "gd",
+    title: "Gradient descent (GD)",
+    Demo: GradientDescentDemo,
+    overview: GD_OVERVIEW,
+  },
+  {
+    id: "sgd",
+    title: "Stochastic gradient descent (SGD)",
+    Demo: SgdDemo,
+    overview: SGD_OVERVIEW,
+  },
+  {
+    id: "minibatch",
+    title: "Mini-batch SGD",
+    Demo: MinibatchDemo,
+    overview: MINIBATCH_OVERVIEW,
+  },
+  {
+    id: "momentum",
+    title: "Momentum",
+    Demo: MomentumDemo,
+    overview: MOMENTUM_OVERVIEW,
+  },
   {
     id: "nesterov",
     title: "Nesterov accelerated gradient",
     Demo: NesterovDemo,
+    overview: NESTEROV_OVERVIEW,
   },
-  { id: "heavy-ball", title: "Heavy-ball method", Demo: HeavyBallDemo },
+  {
+    id: "heavy-ball",
+    title: "Heavy-ball method",
+    Demo: HeavyBallDemo,
+    overview: HEAVY_BALL_OVERVIEW,
+  },
 ] as const;
 
 export type GradientMethodPageId = (typeof GRADIENT_METHOD_PAGES)[number]["id"];
@@ -475,7 +651,8 @@ export type GradientMethodPageId = (typeof GRADIENT_METHOD_PAGES)[number]["id"];
 function ConceptIntro() {
   const centers = SAMPLE_CENTERS.join(", ");
   return (
-    <div className="mb-6">
+    <div className="mb-6 space-y-4">
+      <DemoNoiseControls />
       <EquationWithWhere
         where={[
           {
@@ -508,12 +685,13 @@ function ConceptIntro() {
   );
 }
 
-export function GradientMethodConcepts({
+function GradientMethodConceptsContent({
   initialPageId = "gd",
 }: {
   initialPageId?: GradientMethodPageId;
 }) {
   const [activeId, setActiveId] = useState<GradientMethodPageId>(initialPageId);
+  const [viewMode, setViewMode] = useState<ConceptViewMode>("demo");
   const activePage =
     GRADIENT_METHOD_PAGES.find((p) => p.id === activeId) ??
     GRADIENT_METHOD_PAGES[0];
@@ -521,35 +699,37 @@ export function GradientMethodConcepts({
 
   return (
     <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
-      <aside className="w-full shrink-0 lg:sticky lg:top-6 lg:w-56">
-        <nav
-          className="flex flex-col gap-1"
-          aria-label={`${GRADIENT_METHOD_CHAPTER} concepts`}
-        >
-          {GRADIENT_METHOD_PAGES.map((page) => {
-            const isActive = page.id === activeId;
-            return (
-              <button
-                key={page.id}
-                type="button"
-                onClick={() => setActiveId(page.id)}
-                aria-current={isActive ? "page" : undefined}
-                className={`rounded-lg px-3 py-2 text-left text-sm transition ${
-                  isActive
-                    ? "bg-emerald-500/15 font-medium text-emerald-200"
-                    : "text-slate-400 hover:bg-slate-800/80 hover:text-slate-200"
-                }`}
-              >
-                {page.title}
-              </button>
-            );
-          })}
-        </nav>
-      </aside>
+      <ConceptChapterSidebar
+        chapter={GRADIENT_METHOD_CHAPTER}
+        pages={GRADIENT_METHOD_PAGES}
+        activeId={activeId}
+        onActiveIdChange={setActiveId}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+      />
       <div className="min-w-0 flex-1">
-        <ConceptIntro />
-        <ActiveDemo />
+        {viewMode === "overview" ? (
+          <ConceptPageOverview
+            title={activePage.title}
+            overview={activePage.overview}
+          />
+        ) : (
+          <>
+            <ConceptIntro />
+            <ActiveDemo />
+          </>
+        )}
       </div>
     </div>
+  );
+}
+
+export function GradientMethodConcepts(
+  props: { initialPageId?: GradientMethodPageId } = {},
+) {
+  return (
+    <DemoNoiseProvider>
+      <GradientMethodConceptsContent {...props} />
+    </DemoNoiseProvider>
   );
 }

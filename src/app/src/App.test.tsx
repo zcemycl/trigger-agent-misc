@@ -93,6 +93,10 @@ describe("App", () => {
     for (const { title } of SECOND_ORDER_PAGES) {
       expect(screen.getByRole("button", { name: title })).toBeInTheDocument();
     }
+    expect(screen.getByRole("button", { name: "Booth" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Ill-conditioned quadratic" }),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Overview" }));
     expect(
       screen.getByLabelText("Newton's method overview"),

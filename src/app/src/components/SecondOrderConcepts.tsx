@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   bfgs,
   conjugateGradient,
@@ -15,12 +15,24 @@ import {
   type ConceptViewMode,
 } from "./ConceptChapterSidebar";
 import {
+  LEAST_SQUARES_EXAMPLES,
+  SMOOTH_OPTIMIZATION_EXAMPLES,
+  type LeastSquaresExampleId,
+  type SmoothOptimizationExampleId,
+} from "../secondOrderExampleCatalog";
+import {
   DemoNoiseControls,
   DemoNoiseProvider,
-  useRosenbrockLeastSquares,
   useShiftedQuadratic3DProblem,
-  useShiftedQuadraticProblem,
 } from "./DemoNoise";
+import {
+  LeastSquaresExampleControls,
+  SmoothExampleControls,
+  useLeastSquaresExampleProblem,
+  useLeastSquaresExampleStart,
+  useSmoothExampleProblem,
+  useSmoothExampleStart,
+} from "./secondOrderDemoHelpers";
 import {
   ConceptPageOverview,
   type ConceptOverview,
@@ -157,45 +169,6 @@ function SecondOrderOptimizationTrace({
   );
 }
 
-function QuadraticStartSliders({
-  x0,
-  y0,
-  onChange,
-}: {
-  x0: number;
-  y0: number;
-  onChange: (x: number, y: number) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-3 sm:flex-row">
-      <label className="flex flex-1 flex-col gap-1 text-sm text-slate-300">
-        Start x₁ = {x0.toFixed(2)}
-        <input
-          type="range"
-          min={-1}
-          max={4}
-          step={0.1}
-          value={x0}
-          onChange={(e) => onChange(Number(e.target.value), y0)}
-          className="accent-emerald-500"
-        />
-      </label>
-      <label className="flex flex-1 flex-col gap-1 text-sm text-slate-300">
-        Start x₂ = {y0.toFixed(2)}
-        <input
-          type="range"
-          min={-1}
-          max={4}
-          step={0.1}
-          value={y0}
-          onChange={(e) => onChange(x0, Number(e.target.value))}
-          className="accent-emerald-500"
-        />
-      </label>
-    </div>
-  );
-}
-
 function QuadraticStartSliders3D({
   values,
   onChange,
@@ -264,22 +237,29 @@ function ProblemDimensionToggle({
 }
 
 function NewtonDemo() {
-  const problem2d = useShiftedQuadraticProblem();
+  const [exampleId, setExampleId] =
+    useState<SmoothOptimizationExampleId>("shifted-quadratic");
+  const { start, setStart, meta } = useSmoothExampleStart(exampleId);
+  const problem2d = useSmoothExampleProblem(exampleId);
   const problem3d = useShiftedQuadratic3DProblem();
   const [dim, setDim] = useState<2 | 3>(2);
-  const [start2, setStart2] = useState({ x0: 0, y0: 0 });
   const [start3, setStart3] = useState<[number, number, number]>([0, 0, 0]);
-  const { objective, gradient, hessian } = dim === 2 ? problem2d : problem3d;
+  const use3d = dim === 3 && exampleId === "shifted-quadratic";
+  useEffect(() => {
+    if (exampleId !== "shifted-quadratic") {
+      setDim(2);
+    }
+  }, [exampleId]);
+  const { objective, gradient, hessian } = use3d ? problem3d : problem2d;
   const result = useMemo(() => {
-    const x0 = dim === 2 ? [start2.x0, start2.y0] : [...start3];
+    const x0 = use3d ? [...start3] : [...start];
     return newtonsMethod(objective, gradient, hessian, x0);
   }, [
     objective,
     gradient,
     hessian,
-    dim,
-    start2.x0,
-    start2.y0,
+    use3d,
+    start,
     start3[0],
     start3[1],
     start3[2],
@@ -293,20 +273,27 @@ function NewtonDemo() {
         </EquationWithWhere>
       }
     >
-      <ProblemDimensionToggle value={dim} onChange={setDim} />
-      {dim === 2 ? (
-        <QuadraticStartSliders
-          x0={start2.x0}
-          y0={start2.y0}
-          onChange={(a, b) => setStart2({ x0: a, y0: b })}
-        />
-      ) : (
-        <QuadraticStartSliders3D values={start3} onChange={setStart3} />
-      )}
+      <SmoothExampleControls
+        exampleId={exampleId}
+        onExampleIdChange={setExampleId}
+        examples={SMOOTH_OPTIMIZATION_EXAMPLES}
+        start={start}
+        onStartChange={(x, y) => setStart([x, y])}
+        hideStartSliders={use3d}
+      >
+        {exampleId === "shifted-quadratic" ? (
+          <ProblemDimensionToggle value={dim} onChange={setDim} />
+        ) : null}
+        {use3d ? (
+          <QuadraticStartSliders3D values={start3} onChange={setStart3} />
+        ) : null}
+      </SmoothExampleControls>
       <SecondOrderOptimizationTrace
         result={result}
         objective={objective}
-        chart={dim === 3 ? "path3d" : "landscape"}
+        xRange={meta.xRange}
+        yRange={meta.yRange}
+        chart={use3d ? "path3d" : "landscape"}
         caption="Newton's method step-by-step iterations"
         TableComponent={OptimizationStepTable}
       />
@@ -315,12 +302,13 @@ function NewtonDemo() {
 }
 
 function DampedNewtonDemo() {
-  const { objective, gradient, hessian } = useShiftedQuadraticProblem();
-  const [x0, setX0] = useState(3);
-  const [y0, setY0] = useState(-2);
+  const [exampleId, setExampleId] =
+    useState<SmoothOptimizationExampleId>("shifted-quadratic");
+  const { start, setStart, meta } = useSmoothExampleStart(exampleId);
+  const { objective, gradient, hessian } = useSmoothExampleProblem(exampleId);
   const result = useMemo(
-    () => dampedNewtonMethod(objective, gradient, hessian, [x0, y0]),
-    [objective, gradient, hessian, x0, y0],
+    () => dampedNewtonMethod(objective, gradient, hessian, [...start]),
+    [objective, gradient, hessian, start],
   );
   return (
     <Section
@@ -342,17 +330,18 @@ function DampedNewtonDemo() {
         </EquationWithWhere>
       }
     >
-      <QuadraticStartSliders
-        x0={x0}
-        y0={y0}
-        onChange={(a, b) => {
-          setX0(a);
-          setY0(b);
-        }}
+      <SmoothExampleControls
+        exampleId={exampleId}
+        onExampleIdChange={setExampleId}
+        examples={SMOOTH_OPTIMIZATION_EXAMPLES}
+        start={start}
+        onStartChange={(x, y) => setStart([x, y])}
       />
       <SecondOrderOptimizationTrace
         result={result}
         objective={objective}
+        xRange={meta.xRange}
+        yRange={meta.yRange}
         caption="Damped Newton step-by-step iterations"
         TableComponent={OptimizationStepTable}
       />
@@ -361,12 +350,13 @@ function DampedNewtonDemo() {
 }
 
 function ConjugateGradientDemo() {
-  const { objective, gradient } = useShiftedQuadraticProblem();
-  const [x0, setX0] = useState(0);
-  const [y0, setY0] = useState(0);
+  const [exampleId, setExampleId] =
+    useState<SmoothOptimizationExampleId>("shifted-quadratic");
+  const { start, setStart, meta } = useSmoothExampleStart(exampleId);
+  const { objective, gradient } = useSmoothExampleProblem(exampleId);
   const result = useMemo(
-    () => conjugateGradient(objective, gradient, [x0, y0]),
-    [objective, gradient, x0, y0],
+    () => conjugateGradient(objective, gradient, [...start]),
+    [objective, gradient, start],
   );
   return (
     <Section
@@ -389,17 +379,18 @@ function ConjugateGradientDemo() {
         </EquationWithWhere>
       }
     >
-      <QuadraticStartSliders
-        x0={x0}
-        y0={y0}
-        onChange={(a, b) => {
-          setX0(a);
-          setY0(b);
-        }}
+      <SmoothExampleControls
+        exampleId={exampleId}
+        onExampleIdChange={setExampleId}
+        examples={SMOOTH_OPTIMIZATION_EXAMPLES}
+        start={start}
+        onStartChange={(x, y) => setStart([x, y])}
       />
       <SecondOrderOptimizationTrace
         result={result}
         objective={objective}
+        xRange={meta.xRange}
+        yRange={meta.yRange}
         caption="Conjugate gradient step-by-step iterations"
         TableComponent={OptimizationStepTable}
       />
@@ -408,12 +399,13 @@ function ConjugateGradientDemo() {
 }
 
 function BfgsDemo() {
-  const { objective, gradient } = useShiftedQuadraticProblem();
-  const [x0, setX0] = useState(0);
-  const [y0, setY0] = useState(0);
+  const [exampleId, setExampleId] =
+    useState<SmoothOptimizationExampleId>("shifted-quadratic");
+  const { start, setStart, meta } = useSmoothExampleStart(exampleId);
+  const { objective, gradient } = useSmoothExampleProblem(exampleId);
   const result = useMemo(
-    () => bfgs(objective, gradient, [x0, y0]),
-    [objective, gradient, x0, y0],
+    () => bfgs(objective, gradient, [...start]),
+    [objective, gradient, start],
   );
   return (
     <Section
@@ -438,17 +430,18 @@ function BfgsDemo() {
         </EquationWithWhere>
       }
     >
-      <QuadraticStartSliders
-        x0={x0}
-        y0={y0}
-        onChange={(a, b) => {
-          setX0(a);
-          setY0(b);
-        }}
+      <SmoothExampleControls
+        exampleId={exampleId}
+        onExampleIdChange={setExampleId}
+        examples={SMOOTH_OPTIMIZATION_EXAMPLES}
+        start={start}
+        onStartChange={(x, y) => setStart([x, y])}
       />
       <SecondOrderOptimizationTrace
         result={result}
         objective={objective}
+        xRange={meta.xRange}
+        yRange={meta.yRange}
         caption="BFGS step-by-step iterations"
         TableComponent={OptimizationStepTable}
       />
@@ -457,12 +450,13 @@ function BfgsDemo() {
 }
 
 function LBfgsDemo() {
-  const { objective, gradient } = useShiftedQuadraticProblem();
-  const [x0, setX0] = useState(0);
-  const [y0, setY0] = useState(0);
+  const [exampleId, setExampleId] =
+    useState<SmoothOptimizationExampleId>("shifted-quadratic");
+  const { start, setStart, meta } = useSmoothExampleStart(exampleId);
+  const { objective, gradient } = useSmoothExampleProblem(exampleId);
   const result = useMemo(
-    () => lbfgs(objective, gradient, [x0, y0]),
-    [objective, gradient, x0, y0],
+    () => lbfgs(objective, gradient, [...start]),
+    [objective, gradient, start],
   );
   return (
     <Section
@@ -483,17 +477,18 @@ function LBfgsDemo() {
         </EquationWithWhere>
       }
     >
-      <QuadraticStartSliders
-        x0={x0}
-        y0={y0}
-        onChange={(a, b) => {
-          setX0(a);
-          setY0(b);
-        }}
+      <SmoothExampleControls
+        exampleId={exampleId}
+        onExampleIdChange={setExampleId}
+        examples={SMOOTH_OPTIMIZATION_EXAMPLES}
+        start={start}
+        onStartChange={(x, y) => setStart([x, y])}
       />
       <SecondOrderOptimizationTrace
         result={result}
         objective={objective}
+        xRange={meta.xRange}
+        yRange={meta.yRange}
         caption="L-BFGS step-by-step iterations"
         TableComponent={OptimizationStepTable}
       />
@@ -502,12 +497,13 @@ function LBfgsDemo() {
 }
 
 function QuasiNewtonDemo() {
-  const { objective, gradient } = useShiftedQuadraticProblem();
-  const [x0, setX0] = useState(2);
-  const [y0, setY0] = useState(2);
+  const [exampleId, setExampleId] =
+    useState<SmoothOptimizationExampleId>("shifted-quadratic");
+  const { start, setStart, meta } = useSmoothExampleStart(exampleId);
+  const { objective, gradient } = useSmoothExampleProblem(exampleId);
   const result = useMemo(
-    () => quasiNewtonBfgs(objective, gradient, [x0, y0]),
-    [objective, gradient, x0, y0],
+    () => quasiNewtonBfgs(objective, gradient, [...start]),
+    [objective, gradient, start],
   );
   return (
     <Section
@@ -528,17 +524,18 @@ function QuasiNewtonDemo() {
         </EquationWithWhere>
       }
     >
-      <QuadraticStartSliders
-        x0={x0}
-        y0={y0}
-        onChange={(a, b) => {
-          setX0(a);
-          setY0(b);
-        }}
+      <SmoothExampleControls
+        exampleId={exampleId}
+        onExampleIdChange={setExampleId}
+        examples={SMOOTH_OPTIMIZATION_EXAMPLES}
+        start={start}
+        onStartChange={(x, y) => setStart([x, y])}
       />
       <SecondOrderOptimizationTrace
         result={result}
         objective={objective}
+        xRange={meta.xRange}
+        yRange={meta.yRange}
         caption="Quasi-Newton (BFGS) step-by-step iterations"
         TableComponent={OptimizationStepTable}
       />
@@ -546,25 +543,15 @@ function QuasiNewtonDemo() {
   );
 }
 
-function LeastSquaresSliders({
-  x0,
-  y0,
-  onChange,
-}: {
-  x0: number;
-  y0: number;
-  onChange: (x: number, y: number) => void;
-}) {
-  return <QuadraticStartSliders x0={x0} y0={y0} onChange={onChange} />;
-}
-
 function GaussNewtonDemo() {
-  const { residual, jacobian, objective } = useRosenbrockLeastSquares();
-  const [x0, setX0] = useState(0);
-  const [y0, setY0] = useState(0);
+  const [exampleId, setExampleId] =
+    useState<LeastSquaresExampleId>("rosenbrock");
+  const { start, setStart, meta } = useLeastSquaresExampleStart(exampleId);
+  const { residual, jacobian, objective } =
+    useLeastSquaresExampleProblem(exampleId);
   const result = useMemo(
-    () => gaussNewton(residual, jacobian, [x0, y0]),
-    [residual, jacobian, x0, y0],
+    () => gaussNewton(residual, jacobian, [...start]),
+    [residual, jacobian, start],
   );
   return (
     <Section
@@ -575,19 +562,18 @@ function GaussNewtonDemo() {
         </EquationWithWhere>
       }
     >
-      <LeastSquaresSliders
-        x0={x0}
-        y0={y0}
-        onChange={(a, b) => {
-          setX0(a);
-          setY0(b);
-        }}
+      <LeastSquaresExampleControls
+        exampleId={exampleId}
+        onExampleIdChange={setExampleId}
+        examples={LEAST_SQUARES_EXAMPLES}
+        start={start}
+        onStartChange={(x, y) => setStart([x, y])}
       />
       <SecondOrderOptimizationTrace
         result={result}
         objective={objective}
-        xRange={[-1, 2]}
-        yRange={[-1, 2]}
+        xRange={meta.xRange}
+        yRange={meta.yRange}
         caption="Gauss–Newton step-by-step iterations"
         TableComponent={OptimizationStepTable}
       />
@@ -596,12 +582,14 @@ function GaussNewtonDemo() {
 }
 
 function LevenbergMarquardtDemo() {
-  const { residual, jacobian, objective } = useRosenbrockLeastSquares();
-  const [x0, setX0] = useState(0);
-  const [y0, setY0] = useState(0);
+  const [exampleId, setExampleId] =
+    useState<LeastSquaresExampleId>("rosenbrock");
+  const { start, setStart, meta } = useLeastSquaresExampleStart(exampleId);
+  const { residual, jacobian, objective } =
+    useLeastSquaresExampleProblem(exampleId);
   const result = useMemo(
-    () => levenbergMarquardt(residual, jacobian, [x0, y0]),
-    [residual, jacobian, x0, y0],
+    () => levenbergMarquardt(residual, jacobian, [...start]),
+    [residual, jacobian, start],
   );
   return (
     <Section
@@ -612,19 +600,18 @@ function LevenbergMarquardtDemo() {
         </EquationWithWhere>
       }
     >
-      <LeastSquaresSliders
-        x0={x0}
-        y0={y0}
-        onChange={(a, b) => {
-          setX0(a);
-          setY0(b);
-        }}
+      <LeastSquaresExampleControls
+        exampleId={exampleId}
+        onExampleIdChange={setExampleId}
+        examples={LEAST_SQUARES_EXAMPLES}
+        start={start}
+        onStartChange={(x, y) => setStart([x, y])}
       />
       <SecondOrderOptimizationTrace
         result={result}
         objective={objective}
-        xRange={[-1, 2]}
-        yRange={[-1, 2]}
+        xRange={meta.xRange}
+        yRange={meta.yRange}
         caption="Levenberg–Marquardt step-by-step iterations"
         TableComponent={OptimizationStepTable}
       />
@@ -837,15 +824,11 @@ function ConceptIntro() {
           {
             tex: "f(\\mathbf{x})",
             description:
-              "smooth objective for Newton, CG, and quasi-Newton demos",
-          },
-          {
-            tex: "(1, 2)",
-            description: "unique minimizer of the shifted quadratic",
+              "selectable smooth objectives (quadratic, Booth, Rosenbrock, …)",
           },
         ]}
       >
-        <MathBlock tex="f(\mathbf{x}) = \tfrac12\bigl((x_1-1)^2 + (x_2-2)^2\bigr)" />
+        <MathBlock tex="\min_{\mathbf{x}} f(\mathbf{x})" />
       </EquationWithWhere>
       <EquationWithWhere
         where={[
@@ -855,12 +838,11 @@ function ConceptIntro() {
           {
             tex: "\\tfrac12\\|\\mathbf{r}\\|^2",
             description:
-              "nonlinear least-squares objective for Gauss–Newton and LM",
+              "selectable nonlinear least-squares models for Gauss–Newton and LM",
           },
         ]}
       >
         <MathBlock tex="\min_{\mathbf{x}} \tfrac12 \|\mathbf{r}(\mathbf{x})\|^2" />
-        <MathBlock tex="\mathbf{r}(\mathbf{x}) = \begin{pmatrix}x_1-1\\10(x_2-x_1^2)\end{pmatrix}" />
       </EquationWithWhere>
     </div>
   );
